@@ -51,9 +51,22 @@ void GENERATE_ATR()
   Timer0_ResetTime();
   P10 = 1;
   
-  clr_RI; REN = 1;
   for(i = 0; Receive_Data_From_UART0_parity_with_timeout(Buffer + 2 + i); i++);
-  REN = 0;
+  
+  Buffer[0] = 0x00;
+  Buffer[1] = i;
+  cbBuffer = i + 2;
+}
+
+void SEND()
+{
+  UINT8 i;
+  
+  for(i = 0; i < currentIdx; i++)
+  {
+    Send_Data_To_UART_parity(Buffer[i]);
+  }
+  for(i = 0; Receive_Data_From_UART0_parity_with_timeout(Buffer + 2 + i); i++);
   
   Buffer[0] = 0x00;
   Buffer[1] = i;
@@ -74,10 +87,8 @@ void SEND_T0()
     
     if((i == 4) || (procedureType == 1) || (procedureType == 4)) // NULL or ACK = INS XOR FF
     {
-      clr_RI; REN = 1;
       Receive_Data_From_UART0_parity_with_timeout(&procedureByte);
-      REN = 0;
-      
+
       if(procedureByte == 0x60) // problem with i++ here
       {
         procedureType = 1;
@@ -88,9 +99,7 @@ void SEND_T0()
         Buffer[0] = 0x00;
         Buffer[1] = 2;
         Buffer[2] = procedureByte;
-        clr_RI; REN = 1;
         Receive_Data_From_UART0_parity_with_timeout(Buffer + 3);
-        REN = 0;
         cbBuffer = 4;
         break;
       }
@@ -117,9 +126,7 @@ void SEND_T0()
   
   if((procedureType != 0) && (procedureType != 2))
   {
-    clr_RI; REN = 1;
     for(i = 0; Receive_Data_From_UART0_parity_with_timeout(Buffer + 2 + i); i++);
-    REN = 0;
     
     Buffer[0] = 0x00;
     Buffer[1] = i;
@@ -186,12 +193,12 @@ void I2C_ISR(void) interrupt 6
         case I2C_DEVICE_CMD_GENERATE_ATR:
           pCmdFunc = GENERATE_ATR;
           break;
-        
         case I2C_DEVICE_CMD_SEND:
+          pCmdFunc = SEND;
+          break;
         case I2C_DEVICE_CMD_SEND_T0:
           pCmdFunc = SEND_T0;
           break;        
-
         case I2C_DEVICE_CMD_READ:
         default:
           ;

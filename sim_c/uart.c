@@ -38,6 +38,9 @@ UINT8 Receive_Data_From_UART0_parity_with_timeout(UINT8 * pChar)
 {
   UINT8 ret = 0;
 
+  clr_RI;
+  REN = 1;
+    
   Timer0_Start_Timeout();
   while (!RI && !TF0);
   Timer0_Stop_Timeout();
@@ -50,5 +53,8 @@ UINT8 Receive_Data_From_UART0_parity_with_timeout(UINT8 * pChar)
     clr_RI;
     ret = 1;
   }
+  
+  REN = 0;
+  
   return ret;
 }
