@@ -17,7 +17,7 @@
 #define I2C_DEVICE_CMD_SEND_T0      0x07
 
 #define SIM_MODULE_VERS_HI  4
-#define SIM_MODULE_VERS_LO  42
+#define SIM_MODULE_VERS_LO  50
 
 typedef void(*PCMD_FUNC) ();
 

@@ -4,12 +4,12 @@ N76E003.H
 Header file for Nuvoton N76E003
 --------------------------------------------------------------------------*/
 
-sfr P0					= 0x80;
-sfr SP					= 0x81;
-sfr DPL					= 0x82;
-sfr DPH					= 0x83;
-sfr RCTRIM0			= 0x84;
-sfr RCTRIM1			= 0x85;	
+sfr P0			= 0x80;
+sfr SP			= 0x81;
+sfr DPL			= 0x82;
+sfr DPH			= 0x83;
+sfr RCTRIM0		= 0x84;
+sfr RCTRIM1		= 0x85;	
 sfr RWK         = 0x86;
 sfr PCON        = 0x87;
 
@@ -68,7 +68,7 @@ sfr P1M2        = 0xB4;
 sfr P1SR        = 0xB4; //Page1
 sfr P2S         = 0xB5; 
 sfr IPH         = 0xB7;
-sfr PWMINTC			= 0xB7;	//Page1
+sfr PWMINTC		= 0xB7;	//Page1
 
 sfr IP          = 0xB8;
 sfr SADEN       = 0xB9;
@@ -104,20 +104,20 @@ sfr ADCMPH      = 0xCF;
 
 sfr PSW         = 0xD0;
 sfr PWMPH       = 0xD1;
-sfr PWM0H				= 0xD2;
-sfr PWM1H				= 0xD3;
-sfr PWM2H				= 0xD4;
-sfr PWM3H				= 0xD5;
-sfr PNP					= 0xD6;
-sfr FBD					= 0xD7;
+sfr PWM0H		= 0xD2;
+sfr PWM1H		= 0xD3;
+sfr PWM2H		= 0xD4;
+sfr PWM3H		= 0xD5;
+sfr PNP			= 0xD6;
+sfr FBD			= 0xD7;
 
-sfr PWMCON0			= 0xD8;
+sfr PWMCON0		= 0xD8;
 sfr PWMPL       = 0xD9;
-sfr PWM0L				= 0xDA;
-sfr PWM1L				= 0xDB;
-sfr PWM2L				= 0xDC;
-sfr PWM3L				= 0xDD;
-sfr PIOCON0			= 0xDE;
+sfr PWM0L		= 0xDA;
+sfr PWM1L		= 0xDB;
+sfr PWM2L		= 0xDC;
+sfr PWM3L		= 0xDD;
+sfr PIOCON0		= 0xDE;
 sfr PWMCON1     = 0xDF;
 
 sfr ACC         = 0xE0;
@@ -139,13 +139,13 @@ sfr C2H         = 0xEE;
 sfr EIP         = 0xEF;
 
 sfr B           = 0xF0;
-sfr CAPCON3			= 0xF1;
-sfr CAPCON4			= 0xF2;
+sfr CAPCON3		= 0xF1;
+sfr CAPCON4		= 0xF2;
 sfr SPCR        = 0xF3;
-sfr SPCR2				= 0xF3; //Page1
+sfr SPCR2		= 0xF3; //Page1
 sfr SPSR        = 0xF4;
 sfr SPDR        = 0xF5;
-sfr AINDIDS			= 0xF6;
+sfr AINDIDS		= 0xF6;
 sfr EIPH        = 0xF7;
 
 sfr SCON_1      = 0xF8;
@@ -205,7 +205,7 @@ sbit STA        = I2CON^5;
 sbit STO        = I2CON^4;
 sbit SI         = I2CON^3;
 sbit AA         = I2CON^2;
-sbit I2CPX	= I2CON^0;
+sbit I2CPX	    = I2CON^0;
 
 /*  IP  */  
 sbit PADC       = IP^6;
@@ -245,60 +245,41 @@ sbit TI         = SCON^1;
 sbit RI         = SCON^0; 
 
 /*  P1  */     
-sbit P17	= P1^7;
-sbit P16	= P1^6;
-sbit TXD_1	= P1^6; 
-sbit P15	= P1^5;
-sbit P14	= P1^4;
-sbit SDA	= P1^4;    
-sbit P13	= P1^3;
-sbit SCL	= P1^3;  
+sbit P17	    = P1^7;
+sbit P16	    = P1^6;
+sbit TXD_1	    = P1^6; 
+sbit P15	    = P1^5;
+sbit P14	    = P1^4;
+sbit SDA	    = P1^4;    
+sbit P13	    = P1^3;
+sbit SCL	    = P1^3;  
 sbit P12        = P1^2; 
 sbit P11        = P1^1;
 sbit P10        = P1^0;
 
 /*  TCON  */
-sbit TF1				= TCON^7;
-sbit TR1				= TCON^6;
-sbit TF0				= TCON^5;
-sbit TR0				= TCON^4;
-sbit IE1				= TCON^3;
-sbit IT1				= TCON^2;
-sbit IE0				= TCON^1;
-sbit IT0				= TCON^0;
+sbit TF1		= TCON^7;
+sbit TR1		= TCON^6;
+sbit TF0		= TCON^5;
+sbit TR0		= TCON^4;
+sbit IE1		= TCON^3;
+sbit IT1		= TCON^2;
+sbit IE0		= TCON^1;
+sbit IT0		= TCON^0;
 
 /*  P0  */  
 
-sbit P07				= P0^7;
-sbit RXD				= P0^7;
-sbit P06				= P0^6;
-sbit TXD				= P0^6;
-sbit P05				= P0^5;
-sbit P04				= P0^4;
-sbit STADC				= P0^4;
-sbit P03				= P0^3;
-sbit P02				= P0^2;
-sbit RXD_1				= P0^2;
-sbit P01				= P0^1;
-sbit MISO				= P0^1;
-sbit P00				= P0^0;
-sbit MOSI				= P0^0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+sbit P07		= P0^7;
+sbit RXD		= P0^7;
+sbit P06		= P0^6;
+sbit TXD		= P0^6;
+sbit P05		= P0^5;
+sbit P04		= P0^4;
+sbit STADC		= P0^4;
+sbit P03		= P0^3;
+sbit P02		= P0^2;
+sbit RXD_1		= P0^2;
+sbit P01		= P0^1;
+sbit MISO		= P0^1;
+sbit P00		= P0^0;
+sbit MOSI		= P0^0;

@@ -16,8 +16,8 @@ typedef unsigned long         uint32_t;
 #define     ERASE_LDROM				
 #define     READ_LDROM				
 #define     PROGRAM_LDROM			
-#define     READ_CFG					0xC0
+#define     READ_CFG				0xC0
 #define     PROGRAM_CFG				0xE1
-#define			READ_UID					0x04
+#define		READ_UID				0x04
 
 extern bit BIT_TMP;
