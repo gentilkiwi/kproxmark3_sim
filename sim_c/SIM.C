@@ -7,37 +7,30 @@
 #include "i2c.h"
 
 
-#define TRANSFER_BUF_SIZE   260
+#define PM3_CMD_HEADER_LEN    2
 
-// Buffer for data to be send to SIM CARD
+#define TRANSFER_BUF_SIZE     260
+
+// Buffer to be send to SIM CARD
 UINT8 to_sim[TRANSFER_BUF_SIZE];
 
-// Buffer for data to be send to PM3
+// Buffer to be send to PM3
 UINT8 to_pm3[TRANSFER_BUF_SIZE];
 
-
-// how long APDU message to send to SIM CARD
+// How long APDU message to send to SIM CARD
 UINT16 curr_sim_len = 0;
-// how long message to send to PM3
+// How long message to send to PM3
 UINT16 to_pm3_len = 0;   
 
 // Which byte are we currently sending to PM3
 UINT16 curr_send_idx = 0;
 
-// shouldn't it be a ENUM?
+// What is left of Kiwi's state machine ;)
 UINT8 curr_cmd = 0;
 
 #define CMD_POINTER_ZERO  0
 PCMD_FUNC pCmdFunc = CMD_POINTER_ZERO;
 
-#define PM3_CMD_HEADER_LEN    2
-
-/*
-
-ICEMAN;
-What is the structure for send_buf ?
-May I suggest we impose a struct on top of it instead? 
-*/
 
 void main(void) {
     
@@ -128,8 +121,7 @@ static void GENERATE_ATR() {
     // set PIN 10 = HIGH ?  
     P10 = 1;
 
-//    for(; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < sizeof(to_pm3)); i++);
-    for(; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]); i++);
+    for(; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < TRANSFER_BUF_SIZE); i++);
 	queue_pm3(i);
 }
 
@@ -143,8 +135,7 @@ void SEND() {
         Send_Data_To_UART_parity(to_sim[i]);
     }
 
-    // for(i = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + i) && (i < sizeof(to_pm3)); i++);
-    for(i = 0; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]); i++);
+    for(i = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + i) && (i < TRANSFER_BUF_SIZE); i++);
 	queue_pm3(i);
 }
 
@@ -215,8 +206,7 @@ void SEND_T0() {
             }
             
             // read the rest of the bytes from SIM card
-//            for(pi = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + pi) && (pi < sizeof(to_pm3)); pi++);
-            for(pi = 0; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + pi]); pi++);
+            for(pi = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + pi) && (pi < TRANSFER_BUF_SIZE); pi++);
             queue_pm3(pi);
             return;
         }
@@ -379,17 +369,19 @@ void I2C_ISR(void) interrupt 6
 
             // to_pm3_len    == how many bytes we have available to send to PM3.
             // curr_pm3_idx  == which byte are we sending
-            I2DAT = to_pm3[curr_send_idx++];
-            set_AA; 
+            if ( curr_send_idx < to_pm3_len) {
+                I2DAT = to_pm3[curr_send_idx++];
+                set_AA;
+            }
 
             // last byte sent indicator
-            /*
+/*            
             if (curr_send_idx == to_pm3_len - 1) {
                 clr_AA;
             } else {
                 set_AA;
             }
-            */
+*/
             break; 
 		}
 
