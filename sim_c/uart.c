@@ -21,20 +21,20 @@ void InitialUART0_10800_Parity_Timer1() { // T1M = 1, SMOD = 1
 void Send_Data_To_UART_parity(UINT8 c) {
     ACC = c;
     TB8 = P;
-    clr_TI;
     SBUF = c;
+    clr_TI;
     while (!TI);
 }
 
 UINT8 Receive_Data_From_UART0_parity() {
     UINT8 c;
-
     while (!RI);
     c = SBUF;
     // TODO, check parity bit TB8 == P
     clr_RI;
     return c;
 }
+
 
 UINT8 Receive_Data_From_UART0_parity_with_timeout(UINT8 * pChar) {
 
@@ -50,10 +50,14 @@ UINT8 Receive_Data_From_UART0_parity_with_timeout(UINT8 * pChar) {
     Timer0_Stop_Timeout();
 
     if (RI) {
+
         *pChar = SBUF;
+
         //= ACC;
-        // TODO, check parity bit TB8 == P
+        
         clr_RI;
+        
+        // check parity bit TB8 == P
         ret = 1;
     }
 

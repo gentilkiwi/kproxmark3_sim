@@ -19,6 +19,9 @@
 #define SIM_MODULE_VERS_HI  4
 #define SIM_MODULE_VERS_LO  50
 
+#define TRUE  1
+#define FALSE 0
+
 typedef void(*PCMD_FUNC) ();
 
 #endif // __GLOBALS_H__
