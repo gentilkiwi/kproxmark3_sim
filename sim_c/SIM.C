@@ -9,7 +9,7 @@
 
 #define PM3_CMD_HEADER_LEN    2
 
-#define TRANSFER_BUF_SIZE     260
+#define TRANSFER_BUF_SIZE     270
 
 // Buffer to be send to SIM CARD
 UINT8 to_sim[TRANSFER_BUF_SIZE];
