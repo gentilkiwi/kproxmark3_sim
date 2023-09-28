@@ -51,7 +51,7 @@ void main(void) {
     
     Set_All_GPIO_Quasi_Mode;
     P10_PushPull_Mode;
-    P10 = 1;
+    set_P10;
 
     CKDIV = 2; // 16 / (2 * CKDIV) = 4 MHz, for smartcard.
     set_CLOEN; // SIM_CLK
@@ -113,13 +113,9 @@ static void GENERATE_ATR() {
 
     UINT16 i = 0;  
 
-    // set PIN 10 = LOW ?  
-    P10 = 0;
-
+    clr_P10;
     Timer0_ResetTime();
-
-    // set PIN 10 = HIGH ?  
-    P10 = 1;
+    set_P10;
 
     for(; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < TRANSFER_BUF_SIZE); i++);
 	queue_pm3(i);
@@ -159,11 +155,8 @@ void SEND_T0() {
     }
 
     // Five bytes send to SIM, now waiting for procedure byte.
-    
-    for (; si < curr_sim_len; si++) {
+    do {
        
-        loop:
-        
         if (Receive_Data_From_UART0_parity_with_timeout(&procedureByte) == 0) {
             // if failure to recieve from SIM, send what we got back to PM3
             queue_pm3(pi);
@@ -172,11 +165,12 @@ void SEND_T0() {
 
         // NULL recieved,  wait until new protocol byte comes from SIM.
         if (procedureByte == 0x60) {
-            goto loop;
+            si--;
+            continue;
         }
         
         Timer0_UART_Recover();
-        
+            
         // ACK 10.3.3
         if (procedureByte == (ins ^ 0xFF)) {
 
@@ -210,7 +204,9 @@ void SEND_T0() {
             queue_pm3(pi);
             return;
         }
-    } // end for   
+
+        si++;
+    } while (si < curr_sim_len);
 }
 
 
@@ -371,17 +367,15 @@ void I2C_ISR(void) interrupt 6
             // curr_pm3_idx  == which byte are we sending
             if ( curr_send_idx < to_pm3_len) {
                 I2DAT = to_pm3[curr_send_idx++];
-                set_AA;
             }
 
             // last byte sent indicator
-/*            
-            if (curr_send_idx == to_pm3_len - 1) {
+
+            if (curr_send_idx == to_pm3_len) {
                 clr_AA;
             } else {
                 set_AA;
             }
-*/
             break; 
 		}
 
