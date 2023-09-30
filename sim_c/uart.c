@@ -1,7 +1,7 @@
 #include "uart.h"
 #include "timer.h"
 
-void InitialUART0_10800_Parity_Timer1() { // T1M = 1, SMOD = 1
+void InitialUART0_10800_Parity_Timer1() {
 
     SCON = 0x50;    // UART0 Mode1,REN=1,TI=1
     TMOD |= 0x20;   // Timer1 Mode1

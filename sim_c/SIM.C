@@ -6,9 +6,7 @@
 #include "uart.h"
 #include "i2c.h"
 
-
 #define PM3_CMD_HEADER_LEN    2
-
 #define TRANSFER_BUF_SIZE     270
 
 // Buffer to be send to SIM CARD
@@ -33,21 +31,6 @@ PCMD_FUNC pCmdFunc = CMD_POINTER_ZERO;
 
 
 void main(void) {
-    
-    // zero buffers
-    int i;
-    
-    for (i = 0; i < TRANSFER_BUF_SIZE; i += 4) {
-        to_sim[i] = 0x00;
-        to_sim[i + 1] = 0x00;
-        to_sim[i + 2] = 0x00;
-        to_sim[i + 3] = 0x00;
-
-        to_pm3[i] = 0x00;
-        to_pm3[i + 1] = 0x00;
-        to_pm3[i + 2] = 0x00;
-        to_pm3[i + 3] = 0x00;
-    }
     
     Set_All_GPIO_Quasi_Mode;
     P10_PushPull_Mode;
@@ -85,7 +68,6 @@ static void queue_pm3(UINT16 i) {
     to_pm3_len = PM3_CMD_HEADER_LEN + i;
 }
 
-
 static void queue_sw_to_pm3(UINT8 sw0) {
     
     to_pm3[0] = 0;    // MSB length of package
@@ -98,7 +80,6 @@ static void queue_sw_to_pm3(UINT8 sw0) {
     to_pm3_len = PM3_CMD_HEADER_LEN + 2;
 }
 
-
 // Send Firmware Version to Proxmark3
 static void GETVERSION() {
     to_pm3[0] = 0;    // MSB length of package
@@ -110,15 +91,14 @@ static void GETVERSION() {
 
 
 static void GENERATE_ATR() {
-
-    UINT16 i = 0;  
+    UINT16 i;  
 
     clr_P10;
     Timer0_ResetTime();
     set_P10;
 
-    for(; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < TRANSFER_BUF_SIZE); i++);
-	queue_pm3(i);
+    for(i = 0; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < TRANSFER_BUF_SIZE); i++);
+    queue_pm3(i);
 }
 
 
@@ -132,7 +112,7 @@ void SEND() {
     }
 
     for(i = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + i) && (i < TRANSFER_BUF_SIZE); i++);
-	queue_pm3(i);
+    queue_pm3(i);
 }
 
 
@@ -179,7 +159,6 @@ void SEND_T0() {
             continue;
         }
 
-        
         // SW0? check for 0x6[1-F] and 0x9[0-F] 
         // When here,  procedure byte can never be the exception 0x60.  Already dealt w above.
         tmp = ((procedureByte >> 4) & 0x0F);
@@ -198,7 +177,7 @@ void SEND_T0() {
             for(; si < curr_sim_len; si++) {
                 Send_Data_To_UART_parity(to_sim[si]);
             }
-            
+
             // read the rest of the bytes from SIM card
             for(pi = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + pi) && (pi < TRANSFER_BUF_SIZE); pi++);
             queue_pm3(pi);
@@ -208,27 +187,6 @@ void SEND_T0() {
         si++;
     } while (si < curr_sim_len);
 }
-
-
-
-// Direct Call
-#define I2C_BUS_ERR                 0x00
-#define I2C_RECEIVE_ACK             0x60  // Own SLA+W has been received - ACK has been transmitted		
-#define I2C_RECEIVE_ABR_ERR         0x68  // Arbitration lost and own SLA+W has been received - ACK has been transmitted
-#define I2C_RECEIVE_DATA_OK         0x80  // Data byte has been received - ACK has been transmitted
-#define I2C_RECEIVE_DATA_ERR        0x88  // Data byte has been received - NACK has been transmitted
-#define I2C_STOP_START              0xA0  // A STOP or repeated START has been received
-#define I2C_TRANSMIT_ADR_OK         0xA8  // Own SLA+R has been received - ACK has been transmitted
-#define I2C_TRANSMIT_ABR_ERR        0xB0  // Arbitration lost and own SLA+R has been received - ACK has been transmitted
-#define I2C_TRANSMIT_DATA_OK        0xB8  // Data byte has been transmitted - ACK has been received
-#define I2C_TRANSMIT_DATA_ERR       0xC0  // Data byte has been transmitted - NACK has been received
-#define I2C_TRANSMIT_STOP           0xC8  // Last Data byte has been transmitted - ACK has been received
-
-// General Call
-#define I2C_GC_RECEIVE_ACK          0x70  // General Call - Own SLA+W has been received - ACK has been transmitted		
-#define I2C_GC_RECEIVE_ABR_ERR      0x78  // General Call - Arbitration lost and own SLA+W has been received - ACK has been transmitted
-#define I2C_GC_RECEIVE_DATA_OK      0x90  // General Call - Data byte has been received - ACK has been transmitted
-#define I2C_GC_RECEIVE_DATA_ERR     0x98  // General Call - Data byte has been received - NACK has been transmitted
 
 // Interrupt Handler IRQ 6 
 void I2C_ISR(void) interrupt 6
@@ -245,7 +203,7 @@ void I2C_ISR(void) interrupt 6
         // ================ SLAVE RECEIVE below =================
         // PM3 sending to 8051
 
-        // Own SLA+W has been received - ACK has been transmitted		
+        // Own SLA+W has been received - ACK has been transmitted
         // Slave Recieve Address ACK
         case I2C_GC_RECEIVE_ACK:            
         case I2C_RECEIVE_ACK: {
@@ -254,8 +212,8 @@ void I2C_ISR(void) interrupt 6
             set_AA;
             break;
         }
-		
-		// Arbitration lost and own SLA+W has been received - ACK has been transmitted
+
+        // Arbitration lost and own SLA+W has been received - ACK has been transmitted
         // Slave Receive Arbitration lost
         case I2C_GC_RECEIVE_ABR_ERR:        
         case I2C_RECEIVE_ABR_ERR: {
@@ -263,7 +221,7 @@ void I2C_ISR(void) interrupt 6
             set_STA;
             break;
         }
-    
+
         // Data byte has been received - ACK has been transmitted
         // Slave Receive Data ACK
         case I2C_GC_RECEIVE_DATA_OK:        
@@ -294,19 +252,19 @@ void I2C_ISR(void) interrupt 6
             curr_sim_len = 0;
             set_AA;
             break;
-		}
+        }
 
         // 15.3.3 - Slave Receiver Mode & 15.3.4 - Slave Transmitter Mode
 
         // ================ SLAVE TRANSMIT below =================
         // 8051 sending to PM3 
 
-		// A STOP or repeated START has been received
+        // A STOP or repeated START has been received
         // Slave Transmit Repeat Start or Stop
         case I2C_STOP_START: {
             set_AA;
 
-			switch(curr_cmd) {
+            switch(curr_cmd) {
                 case I2C_DEVICE_CMD_GETVERSION: {
                     pCmdFunc = GETVERSION;
                     break;
@@ -333,7 +291,7 @@ void I2C_ISR(void) interrupt 6
 
             curr_cmd = CMD_POINTER_ZERO;
             break; 
-		}
+        }
 
         /*
         * 15.3.4 - Slave TRANSMIT Mode
@@ -377,21 +335,21 @@ void I2C_ISR(void) interrupt 6
                 set_AA;
             }
             break; 
-		}
+        }
 
         // Data byte has been transmitted - NACK has been received
         // Slave Transmit Data NACK
         case I2C_TRANSMIT_DATA_ERR: {
             set_AA;
             break;
-		}
+        }
 
         // Last Data byte has been transmitted - ACK has been received
         // Slave Transmit Last Data ACK
         case I2C_TRANSMIT_STOP: {
             set_AA;
             break;
-		}
+        }
     }
 
     // SI should be last command of I2C ISR
