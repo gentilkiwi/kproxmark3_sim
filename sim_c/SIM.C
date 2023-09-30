@@ -156,6 +156,7 @@ void SEND_T0() {
 
             // send one byte
             Send_Data_To_UART_parity(to_sim[si]);
+            si++;
             continue;
         }
 
