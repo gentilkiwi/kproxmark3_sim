@@ -90,14 +90,19 @@ static void GETVERSION() {
 }
 
 
+// Maximum number of card-response bytes that fit after the 2-byte length
+// header in to_pm3[]. Off-by-2 fix: writing to_pm3[PM3_CMD_HEADER_LEN + i]
+// with i bounded only by TRANSFER_BUF_SIZE walks 2 bytes past the buffer.
+#define PM3_PAYLOAD_MAX (TRANSFER_BUF_SIZE - PM3_CMD_HEADER_LEN)
+
 static void GENERATE_ATR() {
-    UINT16 i;  
+    UINT16 i;
 
     clr_P10;
     Timer0_ResetTime();
     set_P10;
 
-    for(i = 0; Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]) && (i < TRANSFER_BUF_SIZE); i++);
+    for(i = 0; (i < PM3_PAYLOAD_MAX) && Receive_Data_From_UART0_parity_with_timeout(&to_pm3[PM3_CMD_HEADER_LEN + i]); i++);
     queue_pm3(i);
 }
 
@@ -111,7 +116,7 @@ void SEND() {
         Send_Data_To_UART_parity(to_sim[i]);
     }
 
-    for(i = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + i) && (i < TRANSFER_BUF_SIZE); i++);
+    for(i = 0; (i < PM3_PAYLOAD_MAX) && Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + i); i++);
     queue_pm3(i);
 }
 
@@ -119,7 +124,7 @@ void SEND() {
 void SEND_T0() {
 
     UINT8 si;
-    UINT8 pi = 0;
+    UINT16 pi = 0;          // UINT16 so we can hold up to PM3_PAYLOAD_MAX (268)
     UINT8 procedureByte = 0;
     UINT8 ins = to_sim[1];
     UINT8 tmp;
@@ -143,9 +148,14 @@ void SEND_T0() {
             return;
         }
 
-        // NULL recieved,  wait until new protocol byte comes from SIM.
+        // NULL received (ISO 7816-3 sec. 10.3.3, WTX / wait extension):
+        // card is signalling "still working, more procedure byte coming".
+        // Do NOT modify si - we have not sent or accepted any new byte;
+        // just loop and read the next procedure byte.
+        // (Previous "si--; continue;" caused the last header byte (Le/P3) to
+        //  be re-sent if the next procedure byte was an INS-ACK, corrupting
+        //  any APDU whose first procedure byte was a NULL.)
         if (procedureByte == 0x60) {
-            si--;
             continue;
         }
         
@@ -180,7 +190,7 @@ void SEND_T0() {
             }
 
             // read the rest of the bytes from SIM card
-            for(pi = 0; Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + pi) && (pi < TRANSFER_BUF_SIZE); pi++);
+            for(pi = 0; (pi < PM3_PAYLOAD_MAX) && Receive_Data_From_UART0_parity_with_timeout(to_pm3 + PM3_CMD_HEADER_LEN + pi); pi++);
             queue_pm3(pi);
             return;
         }

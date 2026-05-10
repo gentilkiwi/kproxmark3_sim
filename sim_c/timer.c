@@ -1,5 +1,8 @@
 #include "timer.h"
 
+// See timer.h for semantics. 5 * ~100 ms = ~500 ms total wait per byte.
+UINT8 g_rx_timeout_ticks = 5;
+
 void Timer0_Init() {
     clr_T0M;      //T0M=0, Timer0 Clock = Fsys/12
     TMOD |= 0x01; //Timer0 is 16-bit mode

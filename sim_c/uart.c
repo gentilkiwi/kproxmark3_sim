@@ -39,26 +39,34 @@ UINT8 Receive_Data_From_UART0_parity() {
 UINT8 Receive_Data_From_UART0_parity_with_timeout(UINT8 * pChar) {
 
     UINT8 ret = 0;
-    
+    UINT8 tick;
+
     *pChar = 0;
 
     clr_RI;
     REN = 1;
-    
-    Timer0_Start_Timeout();
-    while (!RI && !TF0);
-    Timer0_Stop_Timeout();
 
-    if (RI) {
+    // Wait up to g_rx_timeout_ticks * ~100 ms for a byte to arrive.
+    // This gives slow secure-element SAMs (HID Artemis SLE88, etc.) enough
+    // headroom for AES/SCP02 processing pauses that exceed a single 100 ms
+    // Timer0 reload window. RX still returns immediately on the first byte.
+    for (tick = 0; tick < g_rx_timeout_ticks; tick++) {
+        Timer0_Start_Timeout();
+        while (!RI && !TF0);
+        Timer0_Stop_Timeout();
 
-        *pChar = SBUF;
+        if (RI) {
 
-        //= ACC;
-        
-        clr_RI;
-        
-        // check parity bit TB8 == P
-        ret = 1;
+            *pChar = SBUF;
+
+            //= ACC;
+
+            clr_RI;
+
+            // check parity bit TB8 == P
+            ret = 1;
+            break;
+        }
     }
 
     REN = 0;
