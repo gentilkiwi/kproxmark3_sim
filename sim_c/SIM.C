@@ -1,20 +1,15 @@
 /*
  * Kiwi SIM module for Iceman
  *
- * ISO/IEC 7816-3 bridge between the Proxmark3 (which drives us as an I2C
- * slave) and a smart card (half duplex UART).  Speaks T=0 and T=1.
+ * ISO 7816-3 bridge between the Proxmark3 (I2C master) and a smart card (half
+ * duplex UART). Speaks T=0 and T=1.
  *
- * The main loop does nothing but wait for the I2C ISR to hand it a command.
- * While a command runs we hold SCL low, which is the clock stretch the PM3
- * polls on to know the module is still busy talking to the card.
+ * The main loop waits for the I2C ISR to hand it a command, holding SCL low
+ * while it runs - the clock stretch the PM3 polls on.
  *
- * The ISR hands over a command *number*, not a function pointer.  Keil counts
- * a function whose address is taken as being called from wherever the address
- * was taken, so a pointer parked by the ISR puts every handler into the
- * interrupt's call tree as well as main's.  Anything reachable from both then
- * trips "L15: MULTIPLE CALL TO SEGMENT" and loses its overlaid locals - which
- * on this part is not a warning to wave through, it is silent corruption of
- * whatever the linker decided to share the space with.
+ * The ISR hands over a command number, not a function pointer: Keil treats
+ * taking a function's address as a call from that point, which would put every
+ * handler in the interrupt's call tree too and trip L15 (lost overlaid locals).
  */
 #include "globals.h"
 #include "timer.h"
@@ -107,13 +102,8 @@ static void queue_pm3(UINT16 n) {
     to_pm3_len = (UINT16)(PM3_CMD_HEADER_LEN + n);
 }
 
-/*
- * Read from the card into to_pm3 until it goes quiet.
- *
- * The bounds check happens before the write, which the previous version got
- * the wrong way round: it tested `i < TRANSFER_BUF_SIZE` after storing at
- * to_pm3[2 + i], so a chatty card wrote two bytes past the end of the buffer.
- */
+// Read from the card into to_pm3 until it goes quiet. Bounds check before the
+// write - the previous version tested it after, and overran by two bytes.
 static UINT16 recv_to_pm3(UINT16 first_slices) {
     UINT16 n = 0;
 
@@ -127,11 +117,37 @@ static UINT16 recv_to_pm3(UINT16 first_slices) {
     return n;
 }
 
-/*
- * Length driven read of a single T=1 block for the raw pass through path.  We
- * know from LEN exactly how many bytes are coming, so the answer is handed
- * back the moment the checksum arrives instead of after an idle timeout.
- */
+// Length driven read for T=0. Once the card has acknowledged the header it is
+// committed to a known count, so the read ends on the last byte instead of
+// sitting out an idle gap that will never be filled.
+static UINT16 recv_exact_to_pm3(UINT16 first_slices, UINT16 need) {
+    UINT16 n = 0;
+
+    if (need > TRANSFER_MAX_DATA) {
+        need = TRANSFER_MAX_DATA;
+    }
+
+    while (n < need) {
+        if (!UART_Recv(&to_pm3[PM3_CMD_HEADER_LEN + n],
+                       (n == 0) ? first_slices : RX_IDLE_SLICES)) {
+            break;
+        }
+        n++;
+    }
+    return n;
+}
+
+// What the card owes after an ACK: P3 is Le for a command that is only a
+// header, otherwise it was Lc and the answer is the status word alone.
+static UINT16 t0_expected_len(void) {
+    if (curr_sim_len == 5) {
+        return (UINT16)((to_sim[4] ? (UINT16)to_sim[4] : 256u) + 2u);
+    }
+    return 2u;
+}
+
+// Length driven read of one T=1 block for the raw path - LEN says how many
+// bytes are coming, so no idle timeout is needed to end it.
 static UINT16 recv_block_to_pm3(UINT16 first_slices) {
     UINT16 n = 0;
     UINT16 need;
@@ -214,13 +230,11 @@ static void GENERATE_ATR(void) {
 }
 
 /*
- * 0x02 - raw pass through.  The host owns the protocol, we only move bytes.
+ * 0x02 - raw pass through, the host owns the protocol.
  *
- * The reply used to be collected with a flat 100 ms inter character timeout,
- * which is far too short for the first character of an answer: a default T=0
- * card is allowed WWT ~= 0.9 s and a default T=1 card BWT ~= 1.4 s of thinking
- * time.  The first character now gets the real protocol waiting time, and the
- * rest keeps the short gap so quick exchanges stay quick.
+ * The first character gets the protocol waiting time (WWT ~0.9 s, BWT ~1.4 s at
+ * the defaults); the rest keeps a short inter character gap so quick exchanges
+ * stay quick. It used to be a flat 100 ms for both.
  */
 static void SEND(void) {
     UINT16 i;
@@ -246,17 +260,8 @@ static void SEND(void) {
     }
 }
 
-/*
- * 0x07 - the module runs the T=0 procedure byte exchange (ISO/IEC 7816-3
- * 10.3.3) so the host only has to hand over a plain APDU.
- *
- * Fixed here against the previous version:
- *   - a 0x60 NULL byte used to decrement the send index, so the next real ACK
- *     resent P3 instead of the first data byte;
- *   - a single byte ACK past the end of the command read past to_sim;
- *   - the response collector wrote two bytes past to_pm3 (see recv_to_pm3);
- *   - a missing SW2 was reported as if it had arrived.
- */
+// 0x07 - the module runs the T=0 procedure byte exchange (ISO 7816-3 10.3.3),
+// so the host hands over a plain APDU.
 static void SEND_T0(void) {
 
     UINT8  procedure;
@@ -310,7 +315,7 @@ static void SEND_T0(void) {
             for (; si < curr_sim_len; si++) {
                 UART_Send(to_sim[si]);
             }
-            queue_pm3(recv_to_pm3(iso.wwt_slices));
+            queue_pm3(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
             return;
         }
 
@@ -318,7 +323,7 @@ static void SEND_T0(void) {
         if (procedure == (UINT8)(ins ^ 0xFF)) {
             if (si >= curr_sim_len) {
                 /* nothing left to give - the card is answering, not asking */
-                queue_pm3(recv_to_pm3(iso.wwt_slices));
+                queue_pm3(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
                 return;
             }
             UART_Send(to_sim[si]);
@@ -344,9 +349,7 @@ static void SEND_T1(void) {
         return;
     }
 
-    /* One budget covers the whole thing - see T1_BUDGET_SLICES.  Holding the
-     * I2C bus longer than the Proxmark3 waits for it wedges the bus rather
-     * than merely failing the exchange. */
+    /* one budget for prepare + transceive, see T1_BUDGET_SLICES */
     T1_Begin();
 
     /* First call after an ATR: switch the card to T=1 if it did not come up
@@ -356,9 +359,8 @@ static void SEND_T1(void) {
     n = T1_Transceive(to_sim, curr_sim_len,
                       &to_pm3[PM3_CMD_HEADER_LEN], TRANSFER_MAX_DATA);
 
-    /* A resynch put both sides back to sequence number 0, so one clean retry
-     * of the same APDU is worth having.  The budget is deliberately not reset:
-     * the retry gets whatever time is left, never a second full allowance. */
+    /* a resynch reset both sequence numbers, so one retry is worth having -
+     * on the remaining budget, not a fresh one */
     if (n == T1_E_RESYNCH) {
         n = T1_Transceive(to_sim, curr_sim_len,
                           &to_pm3[PM3_CMD_HEADER_LEN], TRANSFER_MAX_DATA);

@@ -3,40 +3,17 @@
 #include "globals.h"
 
 /*
- * UART0 talks to the card over the single half duplex I/O line.  It runs in
- * mode 3 (9 bit, Timer1 clocked) so that TB8 / RB8 can carry the ISO/IEC
- * 7816-3 parity bit, giving the required
+ * UART0 in mode 3 (9 bit, Timer1 clocked): TB8/RB8 carry the ISO 7816-3 parity
+ * bit, giving the 1 start + 8 data + 1 parity + 1 stop frame. ISO uses even
+ * parity, which is the 8051 PSW parity flag.
  *
- *      1 start + 8 data + 1 parity + 1 stop = 11 etu
+ * Timer1 is the baud generator with SMOD = 1 and T1M = 1, so
+ *      baud = Fsys * 2 / (32 * R),  R = 256 - TH1
+ * and since f_card is Fsys here, R = F / (16 * D). F=372, D=1 gives R = 23.25.
  *
- * character frame.  ISO uses even parity, which on the 8051 is exactly the PSW
- * parity flag of the data byte.
- *
- * Timer1 is the baud generator with SMOD = 1 and T1M = 1 (Timer1 counts Fsys):
- *
- *      baud = Fsys * 2 / (32 * R)      with R = 256 - TH1
- *
- * ISO wants baud = f_card * D / F and on this board f_card is Fsys (the CLO
- * output), so Fsys cancels out:
- *
- *      R = F / (16 * D)
- *
- * For the default F = 372, D = 1 that is R = 23.25.  The historical firmware
- * used R = 24, which came from a "+1" in the old comment's formula and lands
- * 3.1 % slow; R = 23 is 1.1 % fast.  That difference decides whether a card can
- * be read back to back:
- *
- *   the receiver samples bit N at (N + 0.5) of its own bit time, so at the stop
- *   bit - index 10 - a 3.1 % slow clock samples 10.84 card bit times in.  The
- *   stop bit ends at 11.0, where the next character's start bit begins, so that
- *   leaves 0.16 bits of margin.  At 1.1 % fast it is 10.39 in, 0.61 bits of
- *   margin.
- *
- * An isolated character gets away with the tighter one because the line is idle
- * afterwards and a late sample still reads high - which is why an ATR, sent
- * with generous guard time, decodes perfectly at R = 24 while a T=1 block sent
- * at minimum spacing comes back corrupted.  The N76E003's internal RC is good
- * to a percent or two on top, which is enough to consume 0.16 bits entirely.
+ * 23 (+1.1 %) not 24 (-3.1 %): at 24 the stop bit is sampled 10.84 bit times
+ * in, leaving 0.16 bits before the next start bit. Enough for an ATR, whose
+ * characters are spaced, but not for a T=1 block sent back to back.
  */
 #define UART_RELOAD_DEFAULT   23
 

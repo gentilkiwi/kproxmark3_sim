@@ -39,7 +39,7 @@
  *                bus, since only this module can release SCL.
  */
 #define SIM_MODULE_VERS_HI  4
-#define SIM_MODULE_VERS_LO  55
+#define SIM_MODULE_VERS_LO  56
 
 /* Every reply to the PM3 is prefixed with a big endian 16 bit length. */
 #define PM3_CMD_HEADER_LEN  2
