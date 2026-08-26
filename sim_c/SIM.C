@@ -344,6 +344,11 @@ static void SEND_T1(void) {
         return;
     }
 
+    /* One budget covers the whole thing - see T1_BUDGET_SLICES.  Holding the
+     * I2C bus longer than the Proxmark3 waits for it wedges the bus rather
+     * than merely failing the exchange. */
+    T1_Begin();
+
     /* First call after an ATR: switch the card to T=1 if it did not come up
      * that way, and announce our IFSD.  Both are one shot. */
     T1_Prepare();
@@ -352,7 +357,8 @@ static void SEND_T1(void) {
                       &to_pm3[PM3_CMD_HEADER_LEN], TRANSFER_MAX_DATA);
 
     /* A resynch put both sides back to sequence number 0, so one clean retry
-     * of the same APDU is worth having. */
+     * of the same APDU is worth having.  The budget is deliberately not reset:
+     * the retry gets whatever time is left, never a second full allowance. */
     if (n == T1_E_RESYNCH) {
         n = T1_Transceive(to_sim, curr_sim_len,
                           &to_pm3[PM3_CMD_HEADER_LEN], TRANSFER_MAX_DATA);

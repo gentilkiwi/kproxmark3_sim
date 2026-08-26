@@ -87,11 +87,15 @@ UINT16 UART_Get_Reload(void) {
 }
 
 UINT16 UART_Ticks_Per_Etu(void) {
-    /* 1 etu = 16 * R / Fsys seconds, one Timer0 tick = 12 / Fsys seconds,
-     * so an etu is 4 * R / 3 ticks whatever Fsys happens to be.  That is why
-     * SIM_CLC (which changes CKDIV, hence Fsys and the card clock together)
-     * needs no recalculation here. */
-    return (UINT16)((uart_reload * 4u) / 3u);
+    /* 1 etu = 16 * R / Fsys seconds, one Timer0 tick = 12 / Fsys seconds, so an
+     * etu is 4 * R / 3 ticks whatever Fsys happens to be.  That is why SIM_CLC
+     * (which changes CKDIV, hence Fsys and the card clock together) needs no
+     * recalculation here.
+     *
+     * Rounded up, not truncated: everything derived from this is a timeout, and
+     * 4 * R / 3 is rarely a whole number - at R = 23 it is 30.67, and taking 30
+     * made every waiting time 2 % shorter than the card is entitled to. */
+    return (UINT16)(((uart_reload * 4u) + 2u) / 3u);
 }
 
 UINT16 UART_Etu_To_Slices(UINT32 etu) {

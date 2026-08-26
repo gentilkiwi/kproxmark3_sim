@@ -29,9 +29,17 @@
  *                never needed for any of the above.
  * v4.53        : PPS reports the Fi/Di actually in force rather than the ATR's
  *                proposal.
+ * v4.55        : UART divisor 24 -> 23.  At 24 the stop bit is sampled with
+ *                0.16 bits of margin before the next character's start bit,
+ *                which is enough for an ATR but not for characters sent back
+ *                to back - a T=1 block came back corrupted.
+ * v4.54        : the T=1 layer keeps to a time budget.  It could previously
+ *                hold the I2C bus for tens of seconds retrying a quiet card,
+ *                far past the point the Proxmark3 gives up - which wedges the
+ *                bus, since only this module can release SCL.
  */
 #define SIM_MODULE_VERS_HI  4
-#define SIM_MODULE_VERS_LO  53
+#define SIM_MODULE_VERS_LO  55
 
 /* Every reply to the PM3 is prefixed with a big endian 16 bit length. */
 #define PM3_CMD_HEADER_LEN  2

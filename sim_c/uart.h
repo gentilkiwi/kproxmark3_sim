@@ -22,14 +22,23 @@
  *      R = F / (16 * D)
  *
  * For the default F = 372, D = 1 that is R = 23.25.  The historical firmware
- * uses R = 24 (10417 baud, -3.1 % off the 10753 baud ideal), which came from a
- * "+1" in the old comment's formula; R = 23 gives 10870 baud, +1.1 % off.
+ * used R = 24, which came from a "+1" in the old comment's formula and lands
+ * 3.1 % slow; R = 23 is 1.1 % fast.  That difference decides whether a card can
+ * be read back to back:
  *
- * 24 is what ships, because it is the value this board has always run and the
- * signal path is not something to change while adding a feature.  Set this to
- * 23 if you want the more accurate divisor - it is the only line to touch.
+ *   the receiver samples bit N at (N + 0.5) of its own bit time, so at the stop
+ *   bit - index 10 - a 3.1 % slow clock samples 10.84 card bit times in.  The
+ *   stop bit ends at 11.0, where the next character's start bit begins, so that
+ *   leaves 0.16 bits of margin.  At 1.1 % fast it is 10.39 in, 0.61 bits of
+ *   margin.
+ *
+ * An isolated character gets away with the tighter one because the line is idle
+ * afterwards and a late sample still reads high - which is why an ATR, sent
+ * with generous guard time, decodes perfectly at R = 24 while a T=1 block sent
+ * at minimum spacing comes back corrupted.  The N76E003's internal RC is good
+ * to a percent or two on top, which is enough to consume 0.16 bits entirely.
  */
-#define UART_RELOAD_DEFAULT   24
+#define UART_RELOAD_DEFAULT   23
 
 void UART_Init(void);
 
