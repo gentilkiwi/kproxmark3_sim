@@ -397,6 +397,26 @@
               <FilePath>.\i2c.h</FilePath>
             </File>
             <File>
+              <FileName>iso7816.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\iso7816.c</FilePath>
+            </File>
+            <File>
+              <FileName>iso7816.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\iso7816.h</FilePath>
+            </File>
+            <File>
+              <FileName>t1.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\t1.c</FilePath>
+            </File>
+            <File>
+              <FileName>t1.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\t1.h</FilePath>
+            </File>
+            <File>
               <FileName>SIM.C</FileName>
               <FileType>1</FileType>
               <FilePath>.\SIM.C</FilePath>
