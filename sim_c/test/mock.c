@@ -20,6 +20,21 @@ UINT8 UART_Recv(UINT8 *p, UINT16 slices) {
     if (toterm_rd < toterm_wr) { *p = toterm[toterm_rd++]; return 1; }
     *p = 0; mock_rx_timeouts++; return 0;
 }
+/* Same contract as the firmware's: read up to `want` into dst, stop early if
+ * the card goes quiet. */
+UINT16 UART_Recv_Burst(UINT8 *dst, UINT16 want, UINT16 first_slices, UINT16 gap_slices) {
+    UINT16 got = 0;
+    (void)first_slices; (void)gap_slices;
+    while (got < want) {
+        if (UART_Recv(dst, 1) == 0) {
+            break;
+        }
+        dst++;
+        got++;
+    }
+    return got;
+}
+
 void UART_Drain(UINT16 s){ (void)s; toterm_rd = toterm_wr; uart_parity_err = 0; }
 void UART_Set_Reload(UINT16 r){ (void)r; }
 void UART_Set_TH1(UINT8 t){ (void)t; }

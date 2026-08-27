@@ -36,6 +36,19 @@ void UART_Set_Guardtime(UINT8 n);        /* ISO 7816-3 TC1 */
 void  UART_Send(UINT8 c);
 void  UART_Rx_Reset(void);
 UINT8 UART_Recv(UINT8 *pChar, UINT16 slices);
+
+/* Read up to `want` characters straight into xdata.
+ *
+ * UART_Recv() costs a function call, a generic pointer store - which on C51 is
+ * a runtime helper, not a MOVX - and the caller's index arithmetic, for every
+ * single byte. At the default etu there are 4464 instruction cycles per
+ * character to absorb that; at Fi=512/Di=8 there are 768, and the line stops
+ * working. This keeps the same framing and parity handling but pays the call
+ * once per frame instead of once per byte, and writes through an xdata typed
+ * pointer so the compiler emits MOVX @DPTR.
+ *
+ * Returns how many arrived; short means the card stopped early. */
+UINT16 UART_Recv_Burst(UINT8 xdata *dst, UINT16 want, UINT16 first_slices, UINT16 gap_slices);
 void  UART_Drain(UINT16 slices);
 
 /* Sticky, cleared by the caller.  Set whenever a character arrived with the

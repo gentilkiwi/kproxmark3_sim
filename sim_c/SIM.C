@@ -192,20 +192,13 @@ static UINT16 recv_atr_to_pm3(UINT16 first_slices) {
 // committed to a known count, so the read ends on the last byte instead of
 // sitting out an idle gap that will never be filled.
 static UINT16 recv_exact_to_pm3(UINT16 first_slices, UINT16 need) {
-    UINT16 n = 0;
 
     if (need > TRANSFER_MAX_DATA) {
         need = TRANSFER_MAX_DATA;
     }
 
-    while (n < need) {
-        if (!UART_Recv(&to_pm3[PM3_CMD_HEADER_LEN + n],
-                       (n == 0) ? first_slices : RX_IDLE_SLICES)) {
-            break;
-        }
-        n++;
-    }
-    return n;
+    return UART_Recv_Burst(&to_pm3[PM3_CMD_HEADER_LEN], need,
+                           first_slices, RX_IDLE_SLICES);
 }
 
 /*
@@ -214,6 +207,20 @@ static UINT16 recv_exact_to_pm3(UINT16 first_slices, UINT16 need) {
  * the line out before giving up.  Only ever on a path that has already failed -
  * draining costs a slice, which the ordinary path must not pay.
  */
+/*
+ * ISO/IEC 7816-3 7.2 asks for at least 16 etu between two characters going in
+ * opposite directions - that is, before *we* transmit having just received.
+ * It does not apply before listening, and waiting there is harmful: the card
+ * starts answering while we are still delaying, its first character latches in
+ * SBUF, and the second is discarded because RI is still set. At the default
+ * etu a character is 1.1 ms and the card's own thinking hides it; at
+ * Fi=512/Di=8 a character is 192 us against a 288 us guard and the second byte
+ * of every answer goes missing.
+ */
+static void t0_turnaround(void) {
+    Timer0_Delay_Ticks((UINT16)((UINT16)T0_TURNAROUND_ETU * UART_Ticks_Per_Etu()));
+}
+
 static void t0_abort(void) {
     UART_Drain(1);
     queue_pm3(0);
@@ -254,15 +261,13 @@ static UINT16 t0_expected_len(void) {
 // Length driven read of one T=1 block for the raw path - LEN says how many
 // bytes are coming, so no idle timeout is needed to end it.
 static UINT16 recv_block_to_pm3(UINT16 first_slices) {
-    UINT16 n = 0;
+    UINT16 n;
     UINT16 need;
 
-    while (n < 3) {                             /* NAD PCB LEN */
-        if (!UART_Recv(&to_pm3[PM3_CMD_HEADER_LEN + n],
-                       (n == 0) ? first_slices : iso.cwt_slices)) {
-            return n;
-        }
-        n++;
+    n = UART_Recv_Burst(&to_pm3[PM3_CMD_HEADER_LEN], 3,
+                        first_slices, iso.cwt_slices);
+    if (n < 3) {                                /* NAD PCB LEN */
+        return n;
     }
 
     need = (UINT16)(3u + (UINT16)to_pm3[PM3_CMD_HEADER_LEN + 2]
@@ -271,12 +276,8 @@ static UINT16 recv_block_to_pm3(UINT16 first_slices) {
         need = TRANSFER_MAX_DATA;
     }
 
-    while (n < need) {
-        if (!UART_Recv(&to_pm3[PM3_CMD_HEADER_LEN + n], iso.cwt_slices)) {
-            return n;
-        }
-        n++;
-    }
+    n += UART_Recv_Burst(&to_pm3[PM3_CMD_HEADER_LEN + 3], (UINT16)(need - 3),
+                         iso.cwt_slices, iso.cwt_slices);
     return n;
 }
 
@@ -406,8 +407,6 @@ static void SEND_T0(void) {
             continue;
         }
 
-        Timer0_Delay_Ticks((UINT16)((UINT16)T0_TURNAROUND_ETU * UART_Ticks_Per_Etu()));
-
         /* SW1 is 0x6X (X != 0, handled above) or 0x9X and ends the command */
         nibble = (UINT8)(procedure >> 4);
         if ((nibble == 0x06) || (nibble == 0x09)) {
@@ -417,8 +416,11 @@ static void SEND_T0(void) {
 
         /* ACK for all remaining bytes */
         if (procedure == ins) {
-            for (; si < curr_sim_len; si++) {
-                UART_Send(to_sim[si]);
+            if (si < curr_sim_len) {
+                t0_turnaround();
+                for (; si < curr_sim_len; si++) {
+                    UART_Send(to_sim[si]);
+                }
             }
             queue_t0_answer(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
             return;
@@ -431,6 +433,7 @@ static void SEND_T0(void) {
                 queue_t0_answer(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
                 return;
             }
+            t0_turnaround();
             UART_Send(to_sim[si]);
             si++;
             continue;

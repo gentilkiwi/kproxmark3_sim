@@ -230,6 +230,53 @@ void UART_Rx_Reset(void) {
     clr_RI;
 }
 
+UINT16 UART_Recv_Burst(UINT8 xdata *dst, UINT16 want, UINT16 first_slices, UINT16 gap_slices) {
+
+    UINT16 got = 0;
+    UINT16 slices;
+    UINT8  c;
+
+    REN = 1;
+
+    while (got < want) {
+
+        if (!RI) {
+
+            slices = (got == 0) ? first_slices : gap_slices;
+            if (slices == 0) {
+                slices = 1;
+            }
+
+            while (slices--) {
+                Timer0_Start_Slice();
+                while (!RI && !TF0);
+                Timer0_Stop();
+                if (RI) {
+                    break;
+                }
+            }
+
+            if (!RI) {
+                break;                  /* card stopped sending */
+            }
+        }
+
+        c   = SBUF;
+        ACC = c;                        /* refresh PSW.P for the parity compare */
+        if (P) {
+            if (!RB8) uart_parity_err = 1;
+        } else {
+            if (RB8)  uart_parity_err = 1;
+        }
+        clr_RI;
+
+        *dst++ = c;
+        got++;
+    }
+
+    return got;
+}
+
 void UART_Drain(UINT16 slices) {
     UINT8 c;
 
