@@ -120,6 +120,31 @@ int main(void) {
     parse("3B 90 00 11 FF");   /* T0=90 -> Y1=9 (TA1,TD1) */
     CHECK(iso.ta1 == 0x00);
 
+    /* A faster etu must not shorten the wall-clock patience: the card's
+     * computation time does not scale with the link. */
+    printf("waiting times do not shrink when the link speeds up\n");
+    {
+        UINT32 etu = (960UL * 10UL) + 480UL;      /* WWT at WI = 10 */
+
+        UART_Set_Reload(UART_RELOAD_DEFAULT);
+        UINT16 at_default = UART_Etu_To_Slices(etu);
+
+        UART_Set_Reload(8);                        /* TA1 0x93, Fi=512 Di=4 */
+        UINT16 at_fast = UART_Etu_To_Slices(etu);
+
+        CHECK(UART_Ticks_Per_Etu() < UART_TICKS_PER_ETU_DEFAULT);
+        CHECK(at_fast >= at_default);
+
+        UART_Set_Reload(1);                        /* TA1 0x96, the extreme */
+        CHECK(UART_Etu_To_Slices(etu) >= at_default);
+
+        /* and a slower link still gets its longer budget */
+        UART_Set_Reload(64);
+        CHECK(UART_Etu_To_Slices(etu) >= at_default);
+
+        UART_Set_Reload(UART_RELOAD_DEFAULT);
+    }
+
     printf(fails ? "\n%d FAILURES\n" : "\nall ATR / baud checks passed\n", fails);
     return fails != 0;
 }

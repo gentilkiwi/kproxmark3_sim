@@ -106,6 +106,27 @@ UINT16 UART_Etu_To_Slices(UINT32 etu) {
         per_etu = 1;
     }
     slices = ((etu * per_etu) / (UINT32)T0_SLICE_TICKS) + 1UL;
+
+    /*
+     * A faster etu must not shorten how long we are prepared to wait for the
+     * card to think.  ISO/IEC 7816-3 states the waiting times in etu, so
+     * negotiating a quicker link scales them down - but a card's computation
+     * time is wall clock and does not get faster because the wire did.  A SAM
+     * that took 500 ms to answer still takes 500 ms after a PPS to Fi=512,
+     * while WWT would have fallen from 950 ms to 350 ms and the exchange would
+     * time out with no answer at all.
+     *
+     * Keep what the default etu would have allowed as a floor.  At the default
+     * rate this changes nothing.
+     */
+    if (per_etu < (UINT32)UART_TICKS_PER_ETU_DEFAULT) {
+        UINT32 floor_slices =
+            ((etu * (UINT32)UART_TICKS_PER_ETU_DEFAULT) / (UINT32)T0_SLICE_TICKS) + 1UL;
+        if (slices < floor_slices) {
+            slices = floor_slices;
+        }
+    }
+
     if (slices > (UINT32)T0_MAX_SLICES) {
         slices = (UINT32)T0_MAX_SLICES;
     }

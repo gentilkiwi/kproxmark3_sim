@@ -208,6 +208,40 @@ static UINT16 recv_exact_to_pm3(UINT16 first_slices, UINT16 need) {
     return n;
 }
 
+/*
+ * An exchange that ends anywhere but on a status word can leave the card still
+ * sending.  Those bytes would be read as the front of the next answer, so wait
+ * the line out before giving up.  Only ever on a path that has already failed -
+ * draining costs a slice, which the ordinary path must not pay.
+ */
+static void t0_abort(void) {
+    UART_Drain(1);
+    queue_pm3(0);
+}
+
+/* T=0 answers end in SW1 SW2, and SW1 is always 6X or 9X (10.3.3).  Anything
+ * else means the card was cut off mid answer. */
+static UINT8 t0_answer_complete(UINT16 n) {
+
+    UINT8 sw1;
+
+    if (n < 2) {
+        return 0;
+    }
+
+    sw1 = (UINT8)(to_pm3[PM3_CMD_HEADER_LEN + n - 2] & 0xF0);
+    return (UINT8)((sw1 == 0x60) || (sw1 == 0x90));
+}
+
+/* Hand back what arrived, clearing the line first if the card was cut off. */
+static void queue_t0_answer(UINT16 n) {
+
+    if (t0_answer_complete(n) == 0) {
+        UART_Drain(1);
+    }
+    queue_pm3(n);
+}
+
 // What the card owes after an ACK: P3 is Le for a command that is only a
 // header, otherwise it was Lc and the answer is the status word alone.
 static UINT16 t0_expected_len(void) {
@@ -357,12 +391,12 @@ static void SEND_T0(void) {
     for (;;) {
 
         if (++guard == 0) {                       /* runaway card, give up */
-            queue_pm3(0);
+            t0_abort();
             return;
         }
 
         if (!UART_Recv(&procedure, iso.wwt_slices)) {
-            queue_pm3(0);
+            t0_abort();
             return;
         }
 
@@ -386,7 +420,7 @@ static void SEND_T0(void) {
             for (; si < curr_sim_len; si++) {
                 UART_Send(to_sim[si]);
             }
-            queue_pm3(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
+            queue_t0_answer(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
             return;
         }
 
@@ -394,7 +428,7 @@ static void SEND_T0(void) {
         if (procedure == (UINT8)(ins ^ 0xFF)) {
             if (si >= curr_sim_len) {
                 /* nothing left to give - the card is answering, not asking */
-                queue_pm3(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
+                queue_t0_answer(recv_exact_to_pm3(iso.wwt_slices, t0_expected_len()));
                 return;
             }
             UART_Send(to_sim[si]);
@@ -403,7 +437,7 @@ static void SEND_T0(void) {
         }
 
         /* not a procedure byte we know */
-        queue_pm3(0);
+        t0_abort();
         return;
     }
 }

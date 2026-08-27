@@ -17,6 +17,7 @@ int t0_expect_in;       /* bytes the card still wants for a case 3 command    */
 int t0_sw1, t0_sw2;
 unsigned char t0_in[300]; int t0_in_n;
 int t0_single_left;
+int t0_recv_calls;      /* UART_Recv calls: a drain shows up as an extra one */
 
 static void push(unsigned char c){ toterm[wr++] = c; }
 static void push_sw(void){ push((unsigned char)t0_sw1); push((unsigned char)t0_sw2); }
@@ -51,6 +52,7 @@ void UART_Send(UINT8 c) {
 
 UINT8 UART_Recv(UINT8 *p, UINT16 s) {
     (void)s;
+    t0_recv_calls++;
     if (rd < wr) { *p = toterm[rd++]; return 1; }
     *p = 0; return 0;
 }
@@ -74,7 +76,7 @@ void I2C_Init(void){}
 void t0_reset(void) {
     rd = wr = 0; hdr_n = 0; t0_in_n = 0; t0_single_left = 0;
     t0_mode = 0; t0_nulls = 0; t0_outlen = 0; t0_expect_in = 0;
-    t0_sw1 = 0x90; t0_sw2 = 0x00;
+    t0_sw1 = 0x90; t0_sw2 = 0x00; t0_recv_calls = 0;
 }
 const unsigned char *t0_header(void){ return hdr; }
 

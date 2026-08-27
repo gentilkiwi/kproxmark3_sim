@@ -17,6 +17,10 @@
  */
 #define UART_RELOAD_DEFAULT   23
 
+/* Ticks per etu at the default reload, 4 * R / 3 rounded up. Used as a floor
+ * for the waiting times: see UART_Etu_To_Slices(). */
+#define UART_TICKS_PER_ETU_DEFAULT  (((UART_RELOAD_DEFAULT * 4u) + 2u) / 3u)
+
 void UART_Init(void);
 
 void   UART_Set_Reload(UINT16 reload);   /* reload = 256 - TH1, 2..256 */

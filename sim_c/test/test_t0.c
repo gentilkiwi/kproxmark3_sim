@@ -2,6 +2,7 @@
 #include <string.h>
 #include "globals.h"
 #include "iso7816.h"
+#include "uart.h"
 
 void SEND_T0(void);
 void SEND(void);
@@ -10,6 +11,7 @@ extern volatile UINT16 curr_sim_len;
 extern volatile UINT16 to_pm3_len;
 extern void t0_reset(void);
 extern int t0_mode, t0_nulls, t0_outlen, t0_expect_in, t0_sw1, t0_sw2, t0_in_n;
+extern int t0_recv_calls;
 extern unsigned char t0_in[];
 extern const unsigned char *t0_header(void);
 extern void t0_push_raw(const unsigned char *b, int n);
@@ -128,6 +130,43 @@ int main(void) {
         printf("no ATR at all\n");
         setup();
         CHECK(recv_atr_to_pm3(4) == 0);
+    }
+
+    /* A cut-off exchange must clear the line, or what the card was still
+     * sending is read as the front of the next answer. The ordinary path must
+     * not pay for that. */
+    printf("a complete answer is not drained\n");
+    setup();
+    to_sim[0]=0x00; to_sim[1]=0xB0; to_sim[2]=0x00; to_sim[3]=0x00; to_sim[4]=0x04;
+    curr_sim_len = 5; t0_outlen = 4;
+    SEND_T0();
+    CHECK(rlen() == 6);
+    CHECK(to_pm3[6] == 0x90 && to_pm3[7] == 0x00);
+    /* one call for the procedure byte, six for the answer, and no more: a
+     * drain would show up here as an extra call that finds nothing */
+    CHECK(t0_recv_calls == 7);
+
+    printf("bytes left behind after a cut-off answer are cleared\n");
+    setup();
+    to_sim[0]=0x00; to_sim[1]=0xB0; to_sim[2]=0x00; to_sim[3]=0x00; to_sim[4]=0x08;
+    curr_sim_len = 5; t0_outlen = 3;      /* fewer than Le, and no status word */
+    t0_sw1 = 0x11; t0_sw2 = 0x22;         /* not a 6X/9X, so the answer is short */
+    SEND_T0();
+    /* whatever it handed back, the receiver must be empty afterwards */
+    {
+        unsigned char leftover;
+        CHECK(UART_Recv(&leftover, 1) == 0);
+    }
+
+    printf("an unknown procedure byte clears the line\n");
+    setup();
+    to_sim[0]=0x00; to_sim[1]=0xB0; to_sim[4]=0x04;
+    curr_sim_len = 5; t0_mode = 2; t0_sw1 = 0x33; t0_sw2 = 0x44;
+    SEND_T0();
+    CHECK(rlen() == 0 || rlen() == 2);
+    {
+        unsigned char leftover;
+        CHECK(UART_Recv(&leftover, 1) == 0);
     }
 
     printf(fails ? "\n%d FAILURES\n" : "\nall T=0 checks passed\n", fails);
