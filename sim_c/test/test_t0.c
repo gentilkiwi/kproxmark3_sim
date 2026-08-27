@@ -5,12 +5,15 @@
 
 void SEND_T0(void);
 void SEND(void);
+UINT16 recv_atr_to_pm3(UINT16 first_slices);
 extern volatile UINT16 curr_sim_len;
 extern volatile UINT16 to_pm3_len;
 extern void t0_reset(void);
 extern int t0_mode, t0_nulls, t0_outlen, t0_expect_in, t0_sw1, t0_sw2, t0_in_n;
 extern unsigned char t0_in[];
 extern const unsigned char *t0_header(void);
+extern void t0_push_raw(const unsigned char *b, int n);
+extern int t0_rx_consumed(void);
 
 static int fails;
 #define CHECK(c) do { if(!(c)){ printf("  FAIL %d: %s\n", __LINE__, #c); fails++; } } while(0)
@@ -85,6 +88,47 @@ int main(void) {
     SEND_T0();
     CHECK(rlen() <= TRANSFER_MAX_DATA);
     CHECK(to_pm3_len <= TRANSFER_BUF_SIZE);
+
+    /* ATR length comes from TS and T0, so the read ends on the last byte
+     * instead of waiting out an idle gap. A sentinel must stay untouched. */
+    {
+        static const struct { const char *name; int len; unsigned char b[40]; } atrs[] = {
+            { "Grace SAM, T=0 then T=1 then T=15, TCK", 15,
+              {0x3B,0x95,0x96,0x80,0xB1,0xFE,0x55,0x1F,0xC7,0x47,0x72,0x61,0x63,0x65,0x13} },
+            { "MasterCard, TB1 TC1 TD1, 10 historical, TCK", 19,
+              {0x3B,0xEA,0x00,0x00,0x81,0x31,0xFE,0x45,
+               0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x5A} },
+            { "Fido SIM, TA1 TD1 TD2 TA3, 15 historical, TCK", 22,
+              {0x3B,0x9F,0x96,0x80,0x1F,0xC7,0x80,0x31,0xE0,0x73,0xFE,0x21,
+               0x1B,0x64,0x41,0x63,0x32,0x00,0x82,0x90,0x00,0xD1} },
+            { "T=0 only, no TD1, no TCK", 7,
+              {0x3B,0x05,0x11,0x22,0x33,0x44,0x55} },
+            { "no interface bytes and no historical bytes", 2,
+              {0x3B,0x00} },
+        };
+        static const unsigned char sentinel[1] = {0xA5};
+        unsigned int t;
+
+        for (t = 0; t < sizeof(atrs) / sizeof(atrs[0]); t++) {
+            printf("ATR length: %s\n", atrs[t].name);
+            setup();
+            t0_push_raw(atrs[t].b, atrs[t].len);
+            t0_push_raw(sentinel, 1);
+            CHECK(recv_atr_to_pm3(4) == (UINT16)atrs[t].len);
+            CHECK(to_pm3[PM3_CMD_HEADER_LEN] == atrs[t].b[0]);
+            CHECK(to_pm3[PM3_CMD_HEADER_LEN + atrs[t].len - 1] == atrs[t].b[atrs[t].len - 1]);
+            CHECK(t0_rx_consumed() == atrs[t].len);
+        }
+
+        printf("ATR that stops early is reported short, not overrun\n");
+        setup();
+        t0_push_raw(atrs[0].b, 4);
+        CHECK(recv_atr_to_pm3(4) == 4);
+
+        printf("no ATR at all\n");
+        setup();
+        CHECK(recv_atr_to_pm3(4) == 0);
+    }
 
     printf(fails ? "\n%d FAILURES\n" : "\nall T=0 checks passed\n", fails);
     return fails != 0;

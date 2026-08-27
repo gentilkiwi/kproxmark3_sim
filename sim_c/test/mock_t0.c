@@ -77,3 +77,8 @@ void t0_reset(void) {
     t0_sw1 = 0x90; t0_sw2 = 0x00;
 }
 const unsigned char *t0_header(void){ return hdr; }
+
+/* Preload the card to reader queue, and report how much of it was taken, so a
+ * test can show a read stopped on the last byte it was owed. */
+void t0_push_raw(const unsigned char *b, int n) { int i; for (i = 0; i < n; i++) push(b[i]); }
+int  t0_rx_consumed(void) { return rd; }

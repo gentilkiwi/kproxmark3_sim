@@ -29,7 +29,8 @@ run: $(TESTS)
 STAMP = $(B)/.staged
 
 $(STAMP): $(SRC)/N76E003.h $(SRC)/Common.h $(SRC)/Function_Define.h $(SRC)/SIM.C \
-          $(SRC)/t1.c $(SRC)/iso7816.c $(SRC)/uart.c $(SRC)/timer.c
+          $(SRC)/t1.c $(SRC)/iso7816.c $(SRC)/uart.c $(SRC)/timer.c \
+          mock.c mock_t0.c pre.h $(wildcard test_*.c)
 	@mkdir -p $(B)
 	@cp $(SRC)/*.c $(SRC)/*.h $(B)/
 	@cp $(SRC)/Function_Define.h $(B)/Function_define.h

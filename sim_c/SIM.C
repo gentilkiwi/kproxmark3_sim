@@ -117,6 +117,77 @@ static UINT16 recv_to_pm3(UINT16 first_slices) {
     return n;
 }
 
+// Length driven read of an ATR, ISO/IEC 7816-3 clause 8. TS and T0 say exactly
+// what follows: an interface byte for every bit set in a Y nibble, the next Y
+// coming from each TD, then K historical bytes, then TCK unless T=0 is the only
+// protocol offered. Ending on the last byte saves the idle gap that used to
+// close every card select.
+static UINT16 recv_atr_to_pm3(UINT16 first_slices) {
+
+    UINT8 xdata *atr = &to_pm3[PM3_CMD_HEADER_LEN];
+    UINT16 n;
+    UINT8  y;
+    UINT8  k;
+    UINT8  next;
+    UINT8  need_tck = 0;
+    UINT8  i;
+
+    if (!UART_Recv(&atr[0], first_slices)) {      /* TS */
+        return 0;
+    }
+    if (!UART_Recv(&atr[1], RX_IDLE_SLICES)) {    /* T0 */
+        return 1;
+    }
+    n = 2;
+
+    y = (UINT8)(atr[1] >> 4);
+    k = (UINT8)(atr[1] & 0x0F);
+
+    while (y) {
+
+        next = 0;
+
+        for (i = 0; i < 4; i++) {
+
+            if ((y & (UINT8)(1u << i)) == 0) {
+                continue;
+            }
+            if (n >= TRANSFER_MAX_DATA) {
+                return n;
+            }
+            if (!UART_Recv(&atr[n], RX_IDLE_SLICES)) {
+                return n;
+            }
+
+            if (i == 3) {                         /* TD carries T and the next Y */
+                if (atr[n] & 0x0F) {
+                    need_tck = 1;
+                }
+                next = (UINT8)(atr[n] >> 4);
+            }
+            n++;
+        }
+
+        y = next;
+    }
+
+    for (i = 0; i < k; i++) {
+        if (n >= TRANSFER_MAX_DATA) {
+            return n;
+        }
+        if (!UART_Recv(&atr[n], RX_IDLE_SLICES)) {
+            return n;
+        }
+        n++;
+    }
+
+    if (need_tck && (n < TRANSFER_MAX_DATA) && UART_Recv(&atr[n], RX_IDLE_SLICES)) {
+        n++;
+    }
+
+    return n;
+}
+
 // Length driven read for T=0. Once the card has acknowledged the header it is
 // committed to a known count, so the read ends on the last byte instead of
 // sitting out an idle gap that will never be filled.
@@ -219,7 +290,7 @@ static void GENERATE_ATR(void) {
     Timer0_Delay_Slices(1);               /* 50 ms */
     set_P10;                              /* RST high */
 
-    n = recv_to_pm3(ATR_WAIT_SLICES);
+    n = recv_atr_to_pm3(ATR_WAIT_SLICES);
 
     if (n) {
         /* Everything downstream - waiting times, IFSC, checksum type, guard
