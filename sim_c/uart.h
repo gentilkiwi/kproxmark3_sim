@@ -45,7 +45,8 @@ UINT8 UART_Recv(UINT8 *pChar, UINT16 slices);
  * character to absorb that; at Fi=512/Di=8 there are 768, and the line stops
  * working. This keeps the same framing and parity handling but pays the call
  * once per frame instead of once per byte, and writes through an xdata typed
- * pointer so the compiler emits MOVX @DPTR.
+ * pointer so the compiler emits MOVX @DPTR. T=1 uses this for each normal
+ * receive frame, including its header and EDC.
  *
  * Returns how many arrived; short means the card stopped early. */
 UINT16 UART_Recv_Burst(UINT8 xdata *dst, UINT16 want, UINT16 first_slices, UINT16 gap_slices);
