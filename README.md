@@ -53,6 +53,60 @@ if all goes well,  you will have the following output
 
 ## Protocol support
 
+### v4.66: TA1=0x96 clock and receive fixes
+
+TA1=0x96 selects F=512, D=32. At the default 4 MHz card clock this is
+250 kbaud (4 us per ETU). The existing PPS command selects this rate with
+payload `{0x00, 0x96}` for T=0 or `{0x01, 0x96}` for T=1, immediately after
+reset/ATR. Check that its reply is `{1, requested_protocol, 0x96}` before
+sending APDUs; advertising TA1 in the ATR alone does not select the rate.
+
+The MCU now runs at 16 MHz while PWM1 supplies the existing 4 MHz card
+clock on P1.1 (PIOCON0.PIO01). Edge-aligned PWM uses period 3 and duty 2.
+Timer3 supplies UART0 baud: divisor 93 at the default rate, 8 at TA1=0x95,
+and 4 at TA1=0x96. This avoids the N76E003's forbidden divisor 1 with SMOD=1.
+The previous receive-buffer-only v4.66 build still used that invalid divisor.
+
+Legacy SETBAUD values remain card-relative: TH1=0xFF translates to divisor 4
+at the default card clock. SIM_CLC changes the card clock without slowing the
+CPU; a clock change that would require divisor 1 is rejected. Timer0 uses
+25 ms slices so a slice fits its 16-bit counter at the faster CPU clock.
+Long guard and turnaround delays are split into bounded timer intervals.
+
+UART0 now captures received bytes in an interrupt handler into a 64-byte
+internal-RAM ring (63 usable slots). This covers processing gaps between
+procedure bytes, block headers, payloads and checksums. Both protocol paths
+consume the same queue. Queue overflow flags an invalid frame, using the
+existing parity-error indication: T=0 returns an empty response and T=1 uses
+its existing recovery path. T=0 also rejects received parity errors.
+
+UART0 uses register bank 1 and high interrupt priority; transmission polls TI
+with ES disabled and enables reception before returning. Keep bank 1 reserved
+for UART0. Reception requires global interrupts enabled, as the normal I2C
+initialization already does.
+
+Validation: Keil C51 9.60.7 / BL51 6.22.4 LARGE, optimization 9 for size;
+7939 bytes code, 645 bytes XDATA; the padded binary is 7940 bytes.
+All seven host suites pass with ProxSpace MinGW GCC on Windows, including queue
+wraparound/overflow, parity errors, T=0 error rejection and T=1 retransmission
+for an error queued before reception starts. Host mocks do not model UART
+timing or physical PWM output. The clock suite checks routing, baud divisors,
+legacy restore commands and timer bounds. Clang, Linux and macOS were not tested.
+
+Hardware validation reported on 2026-09-05: the same T=1 APDU returned an
+identical response and 9000 at TA1=0x95 and 0x96. Encoder credits and SEOS
+reads/writes also worked; debug logs confirmed T=1 / TA1=0x96. Some SEOS
+encodes needed an application retry after a SAM rejection; consistent
+first-attempt encoding is not established by these results.
+
+Remaining hardware validation: exercise both protocols with a
+card that accepts PPS1=0x96: long T=0 reads and writes, T=1 chained responses
+and commands, LRC/CRC where supported, repeated APDUs, reset and renegotiation.
+Check the card clock and 4 us ETU with a logic analyzer, compare complete
+response bytes against the same commands at the default rate and at 0x95,
+and exercise parity-error recovery. The host tests cannot establish that
+the interrupt and main loop meet every real card's timing requirements.
+
 The firmware talks to the card over UART0 in 9-bit mode, using TB8/RB8 as the
 ISO/IEC 7816-3 even parity bit.  Both byte oriented (T=0) and block oriented
 (T=1) transmission protocols are handled inside the module, so the Proxmark3
@@ -73,9 +127,9 @@ only ever hands over a plain APDU and gets a plain APDU back.
 | `0x09` | `PPS`          | protocol[, TA1]        | ok, active protocol, TA1        |
 
 `0x08` and `0x09` are new in v4.51; `0x04` and `0x05` were declared but never
-implemented in the C firmware before it (they now behave exactly like
-`sim011.asm` / `sim013.asm` did, writing Timer1's reload register and CKDIV
-straight through).  A host can tell the two apart from `GETVERSION`.
+implemented in the C firmware before it. v4.66 translates their legacy values
+to Timer3 and the independent card clock. A host can identify the firmware
+version through `GETVERSION`.
 
 ### T=1
 

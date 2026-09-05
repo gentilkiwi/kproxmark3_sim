@@ -62,7 +62,7 @@ static UINT8 xdata *t1_tx_base;
 
 static UINT16 t1_edc;
 
-/* What is left of the exchange's time budget, in 50 ms slices. */
+/* What is left of the exchange's time budget, in 25 ms slices. */
 static UINT16 t1_budget;
 
 /* How long we may wait for the next thing, given what the budget has left. */
@@ -119,7 +119,7 @@ static void t1_edc_update(UINT8 c) {
 static void t1_bgt(void) {
     /* At least 22 etu between the leading edge of the last character received
      * and the first one we send. */
-    Timer0_Delay_Ticks((UINT16)((UINT16)T1_BGT_ETU * UART_Ticks_Per_Etu()));
+    Timer0_Delay_Ticks((UINT32)T1_BGT_ETU * UART_Ticks_Per_Etu());
 }
 
 static void t1_put(UINT8 c) {
@@ -132,6 +132,7 @@ static void t1_send_raw(UINT8 pcb, UINT8 xdata *inf, UINT8 len) {
     UINT16 crc;
 
     t1_bgt();
+    uart_parity_err = 0;             /* replies may arrive before t1_recv */
     t1_edc_init();
 
     t1_put(T1_NAD);
@@ -201,7 +202,6 @@ static UINT8 t1_recv(UINT8 xdata *dst, UINT16 dstmax, UINT16 first_slices) {
     UINT8  i;
     UINT16 crc;
 
-    uart_parity_err = 0;
     t1_edc_init();
     t1_r_pcb  = 0;
     t1_r_len  = 0;

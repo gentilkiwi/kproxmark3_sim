@@ -1,6 +1,7 @@
 #ifndef __T1_H__
 #define __T1_H__
 #include "globals.h"
+#include "timer.h"
 
 /*
  * ISO 7816-3 clause 11, T=1 block protocol:  NAD PCB LEN [INF 0..254] EDC,
@@ -19,14 +20,14 @@
  * exchange. Every wait comes out of one budget and BWT is clamped to what is
  * left: a card slower than the host is patient cannot be served either way.
  */
-#define T1_BUDGET_SLICES        56      /* 2.8 s in 50 ms slices */
+#define T1_BUDGET_SLICES        T0_MS_TO_SLICES(2800UL)
 
 // S(IFS) is answered from card state, so it arrives at once or not at all.
 // One attempt; a card without it just keeps the default IFSD.
-#define T1_HOUSEKEEPING_SLICES  8       /* 400 ms */
+#define T1_HOUSEKEEPING_SLICES  T0_MS_TO_SLICES(400UL)
 
 /* Likewise a PPS response - the card is not computing anything. */
-#define T1_PPS_SLICES           20      /* 1 s */
+#define T1_PPS_SLICES           T0_MS_TO_SLICES(1000UL)
 
 #define T1_E_TIMEOUT    (-1)
 #define T1_E_PROTO      (-2)

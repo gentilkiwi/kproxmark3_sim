@@ -35,7 +35,7 @@ void ISO7816_Reset_Params(void) {
 
     /* A card reset also puts the card back on the default etu, so undo any
      * PPS or CMD_SETBAUD that happened since. */
-    UART_Set_Reload(UART_RELOAD_DEFAULT);
+    UART_Set_FiDi(0x11);
     UART_Set_Guardtime(0);
     ISO7816_Update_Timeouts();
 }
@@ -156,6 +156,7 @@ UINT8 ISO7816_PPS(UINT8 proto, UINT8 ta1, UINT8 use_ta1) {
     UINT8 pps0;
 
     proto = (UINT8)(proto & 0x0F);
+    if (use_ta1 && !UART_FiDi_Supported(ta1)) return 0;
 
     n        = 0;
     buf[n++] = 0xFF;                        /* PPSS */
@@ -174,7 +175,7 @@ UINT8 ISO7816_PPS(UINT8 proto, UINT8 ta1, UINT8 use_ta1) {
     }
     buf[n++] = pck;                         /* PCK */
 
-    UART_Drain(1);
+    UART_Drain(T0_MS_TO_SLICES(50UL));
     uart_parity_err = 0;
 
     for (i = 0; i < n; i++) {
@@ -208,6 +209,7 @@ UINT8 ISO7816_PPS(UINT8 proto, UINT8 ta1, UINT8 use_ta1) {
     if (pck || uart_parity_err) {
         return 0;
     }
+    if ((pps0 & 0x10) && (!use_ta1 || buf[2] != ta1)) return 0;
 
     /* The card confirms by echoing the protocol it accepted. */
     if ((UINT8)(pps0 & 0x0F) != proto) {
@@ -227,7 +229,7 @@ UINT8 ISO7816_PPS(UINT8 proto, UINT8 ta1, UINT8 use_ta1) {
         UART_Set_FiDi(buf[2]);
     } else {
         iso.ta1 = 0x11;
-        UART_Set_Reload(UART_RELOAD_DEFAULT);
+        UART_Set_FiDi(0x11);
     }
 
     UART_Set_Guardtime(iso.guard_n);

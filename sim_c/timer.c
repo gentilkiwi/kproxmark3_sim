@@ -20,7 +20,7 @@ void Timer0_Stop(void) {
     clr_TF0;
 }
 
-void Timer0_Delay_Ticks(UINT16 ticks) {
+static void timer0_delay_chunk(UINT16 ticks) {
     UINT16 reload;
 
     if (ticks < 4) {
@@ -36,6 +36,16 @@ void Timer0_Delay_Ticks(UINT16 ticks) {
     while (!TF0);
     clr_TR0;
     clr_TF0;
+}
+
+void Timer0_Delay_Ticks(UINT32 ticks) {
+    while (ticks > 60000UL) {
+        timer0_delay_chunk(60000U);
+        ticks -= 60000UL;
+    }
+    if (ticks) {
+        timer0_delay_chunk((UINT16)ticks);
+    }
 }
 
 void Timer0_Delay_Slices(UINT16 slices) {

@@ -46,11 +46,11 @@ static void run_command(UINT8 cmd);
  * follow up gap short is what makes an ordinary exchange finish quickly
  * instead of always sitting out a full WWT at the end.
  */
-#define RX_IDLE_SLICES    2          /* 100 ms, what every firmware before this used */
+#define RX_IDLE_SLICES    T0_MS_TO_SLICES(100UL)
 
 /* The ATR must start within 40 000 clock cycles (~10 ms at 4 MHz) of RST going
  * high; be far more generous than that. */
-#define ATR_WAIT_SLICES   4          /* 200 ms */
+#define ATR_WAIT_SLICES   T0_MS_TO_SLICES(200UL)
 
 /* ISO/IEC 7816-3 7.2: at least 16 etu between characters travelling in
  * opposite directions.  The old code used a flat 100 us here. */
@@ -61,10 +61,9 @@ void main(void) {
 
     Set_All_GPIO_Quasi_Mode;
     P10_PushPull_Mode;
-    set_P10;                    /* card RST high */
+    clr_P10;                    /* hold reset while the PWM clock starts */
 
-    CKDIV = 2;                  /* Fsys = 16 / (2 * CKDIV) = 4 MHz, also the card clock */
-    set_CLOEN;                  /* drive SIM_CLK from Fsys */
+    UART_Clock_Init();           /* 16 MHz CPU, 4 MHz card clock */
 
     UART_Init();
     Timer0_Init();
@@ -218,11 +217,11 @@ static UINT16 recv_exact_to_pm3(UINT16 first_slices, UINT16 need) {
  * of every answer goes missing.
  */
 static void t0_turnaround(void) {
-    Timer0_Delay_Ticks((UINT16)((UINT16)T0_TURNAROUND_ETU * UART_Ticks_Per_Etu()));
+    Timer0_Delay_Ticks((UINT32)T0_TURNAROUND_ETU * UART_Ticks_Per_Etu());
 }
 
 static void t0_abort(void) {
-    UART_Drain(1);
+    UART_Drain(T0_MS_TO_SLICES(50UL));
     queue_pm3(0);
 }
 
@@ -243,8 +242,13 @@ static UINT8 t0_answer_complete(UINT16 n) {
 /* Hand back what arrived, clearing the line first if the card was cut off. */
 static void queue_t0_answer(UINT16 n) {
 
+    if (uart_parity_err) {
+        t0_abort();
+        return;
+    }
+
     if (t0_answer_complete(n) == 0) {
-        UART_Drain(1);
+        UART_Drain(T0_MS_TO_SLICES(50UL));
     }
     queue_pm3(n);
 }
@@ -287,7 +291,7 @@ static void queue_sw_to_pm3(UINT8 sw1) {
     /* SW2 must follow; report one byte rather than two if it never turns up
      * instead of shipping whatever was left in the buffer. */
     if (UART_Recv(&to_pm3[PM3_CMD_HEADER_LEN + 1], iso.wwt_slices)) {
-        queue_pm3(2);
+        queue_pm3(uart_parity_err ? 0 : 2);
     } else {
         queue_pm3(1);
     }
@@ -322,7 +326,7 @@ static void GENERATE_ATR(void) {
     UART_Rx_Reset();                      /* start listening from a clean slate */
 
     clr_P10;                              /* RST low */
-    Timer0_Delay_Slices(1);               /* 50 ms */
+    Timer0_Delay_Slices(T0_MS_TO_SLICES(50UL));
     set_P10;                              /* RST high */
 
     n = recv_atr_to_pm3(ATR_WAIT_SLICES);
@@ -396,7 +400,7 @@ static void SEND_T0(void) {
             return;
         }
 
-        if (!UART_Recv(&procedure, iso.wwt_slices)) {
+        if (!UART_Recv(&procedure, iso.wwt_slices) || uart_parity_err) {
             t0_abort();
             return;
         }
@@ -505,8 +509,8 @@ static void PPS_EXCHANGE(void) {
 
 /*
  * 0x04 - set the UART baud rate.  This was never implemented in the C
- * firmware; the payload byte is Timer1's reload register written straight
- * through, exactly as sim011.asm and sim013.asm did it.
+ * firmware; the payload byte retains sim011.asm/sim013.asm Timer1 semantics,
+ * translated to the MCU/card clock ratio by UART_Set_TH1.
  */
 static void SETBAUD(void) {
     if (curr_sim_len >= 1) {
@@ -517,14 +521,16 @@ static void SETBAUD(void) {
 
 /*
  * 0x05 - set the card clock divider.  Also never implemented here before; the
- * payload byte goes straight into CKDIV like the assembly version did.
+ * payload byte retains the assembly version's card-frequency selection.
  *
- * Fsys is both the system clock and the card clock, so every waiting time we
- * keep in etu scales with it on its own - nothing else to recompute.
+ * PWM now supplies the card clock while Fsys remains at 16 MHz. Recompute
+ * baud and waiting times after changing the PWM divider.
  */
 static void SIM_CLC(void) {
     if (curr_sim_len >= 1) {
-        CKDIV = to_sim[0];
+        if (UART_Set_Clock(to_sim[0])) {
+            ISO7816_Update_Timeouts();
+        }
     }
 }
 

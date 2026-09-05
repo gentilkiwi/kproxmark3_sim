@@ -24,7 +24,7 @@ typedef struct {
     UINT8  bwi;           /* T=1 TB(i>2) high nibble, default 4              */
     UINT8  cwi;           /* T=1 TB(i>2) low nibble, default 13              */
     UINT8  edc_crc;       /* T=1 TC(i>2) bit 0: 1 = CRC, 0 = LRC             */
-    UINT16 wwt_slices;    /* T=0 work waiting time, in 50 ms slices          */
+    UINT16 wwt_slices;    /* T=0 work waiting time, in 25 ms slices          */
     UINT16 cwt_slices;    /* T=1 character waiting time                      */
     UINT16 bwt_slices;    /* T=1 block waiting time                          */
 } iso7816_t;
