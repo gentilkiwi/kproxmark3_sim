@@ -94,10 +94,7 @@ timing or physical PWM output. The clock suite checks routing, baud divisors,
 legacy restore commands and timer bounds. Clang, Linux and macOS were not tested.
 
 Hardware validation reported on 2026-09-05: the same T=1 APDU returned an
-identical response and 9000 at TA1=0x95 and 0x96. Encoder credits and SEOS
-reads/writes also worked; debug logs confirmed T=1 / TA1=0x96. Some SEOS
-encodes needed an application retry after a SAM rejection; consistent
-first-attempt encoding is not established by these results.
+identical response and 9000 at TA1=0x95 and 0x96.
 
 Remaining hardware validation: exercise both protocols with a
 card that accepts PPS1=0x96: long T=0 reads and writes, T=1 chained responses
