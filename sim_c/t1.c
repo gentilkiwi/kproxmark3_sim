@@ -44,6 +44,14 @@ static UINT8 t1_r_pcb;
 static UINT8 t1_r_len;
 static UINT8 t1_r_inf0;
 
+/* Keep the receive hot path in xdata so UART_Recv_Burst() can consume a
+ * back-to-back T=1 frame without one C function call per character.  At
+ * Fi=512/Di=16 (TA1=95) a character is only 88 us at the module's 4 MHz card
+ * clock; the old byte-at-a-time state machine cannot reliably clear RI before
+ * the following character arrives. */
+static UINT8 xdata t1_rx_hdr[3];
+static UINT8 xdata t1_rx_edc[2];
+
 /* what to repeat when the card asks for a retransmission */
 static UINT8  t1_last_pcb;
 static UINT8  t1_last_is_i;
@@ -54,7 +62,7 @@ static UINT8 xdata *t1_tx_base;
 
 static UINT16 t1_edc;
 
-/* What is left of the exchange's time budget, in 50 ms slices. */
+/* What is left of the exchange's time budget, in 25 ms slices. */
 static UINT16 t1_budget;
 
 /* How long we may wait for the next thing, given what the budget has left. */
@@ -111,7 +119,7 @@ static void t1_edc_update(UINT8 c) {
 static void t1_bgt(void) {
     /* At least 22 etu between the leading edge of the last character received
      * and the first one we send. */
-    Timer0_Delay_Ticks((UINT16)((UINT16)T1_BGT_ETU * UART_Ticks_Per_Etu()));
+    Timer0_Delay_Ticks((UINT32)T1_BGT_ETU * UART_Ticks_Per_Etu());
 }
 
 static void t1_put(UINT8 c) {
@@ -124,6 +132,7 @@ static void t1_send_raw(UINT8 pcb, UINT8 xdata *inf, UINT8 len) {
     UINT16 crc;
 
     t1_bgt();
+    uart_parity_err = 0;             /* replies may arrive before t1_recv */
     t1_edc_init();
 
     t1_put(T1_NAD);
@@ -190,66 +199,69 @@ static void t1_retransmit(void) {
 static UINT8 t1_recv(UINT8 xdata *dst, UINT16 dstmax, UINT16 first_slices) {
 
     UINT8  c;
-    UINT8  e0;
     UINT8  i;
     UINT16 crc;
 
-    uart_parity_err = 0;
     t1_edc_init();
     t1_r_pcb  = 0;
     t1_r_len  = 0;
     t1_r_inf0 = 0;
 
-    if (!UART_Recv(&c, first_slices)) {
+    if (UART_Recv_Burst(t1_rx_hdr, 3, first_slices, iso.cwt_slices) != 3) {
         return T1_RX_TIMEOUT;                    /* NAD */
     }
-    t1_edc_update(c);
-
-    if (!UART_Recv(&c, iso.cwt_slices)) {
-        return T1_RX_TIMEOUT;                    /* PCB */
-    }
-    t1_r_pcb = c;
-    t1_edc_update(c);
-
-    if (!UART_Recv(&c, iso.cwt_slices)) {
-        return T1_RX_TIMEOUT;                    /* LEN */
-    }
-    t1_r_len = c;
-    t1_edc_update(c);
+    t1_edc_update(t1_rx_hdr[0]);
+    t1_r_pcb = t1_rx_hdr[1];
+    t1_edc_update(t1_r_pcb);
+    t1_r_len = t1_rx_hdr[2];
+    t1_edc_update(t1_r_len);
 
     if (t1_r_len == 0xFF) {
         return T1_RX_BADBLOCK;                   /* 255 is RFU */
     }
 
-    for (i = 0; i < t1_r_len; i++) {
-        if (!UART_Recv(&c, iso.cwt_slices)) {
+    if ((dst != (UINT8 xdata *)0) && ((UINT16)t1_r_len <= dstmax)) {
+        if (UART_Recv_Burst(dst, t1_r_len, iso.cwt_slices, iso.cwt_slices) != t1_r_len) {
             return T1_RX_TIMEOUT;
         }
-        t1_edc_update(c);
-        if (i == 0) {
-            t1_r_inf0 = c;
+        for (i = 0; i < t1_r_len; i++) {
+            t1_edc_update(dst[i]);
         }
-        if ((UINT16)i < dstmax) {
-            dst[i] = c;
+        if (t1_r_len) {
+            t1_r_inf0 = dst[0];
+        }
+    } else {
+        /* This is an S block with no destination, or an oversized I block.
+         * It is exceptional; retain the bounded byte-wise drain so the line
+         * is left clean and the caller can report the protocol error. */
+        for (i = 0; i < t1_r_len; i++) {
+            if (!UART_Recv(&c, iso.cwt_slices)) {
+                return T1_RX_TIMEOUT;
+            }
+            t1_edc_update(c);
+            if (i == 0) {
+                t1_r_inf0 = c;
+            }
+            if (((UINT16)i < dstmax) && (dst != (UINT8 xdata *)0)) {
+                dst[i] = c;
+            }
         }
     }
 
     if (iso.edc_crc) {
         crc = (UINT16)(t1_edc ^ 0xFFFF);
-        if (!UART_Recv(&e0, iso.cwt_slices)) {
+        if (UART_Recv_Burst(t1_rx_edc, 2, iso.cwt_slices, iso.cwt_slices) != 2) {
             return T1_RX_TIMEOUT;
         }
-        if (!UART_Recv(&c, iso.cwt_slices)) {
-            return T1_RX_TIMEOUT;
-        }
-        if ((e0 != (UINT8)(crc >> 8)) || (c != (UINT8)(crc & 0xFF))) {
+        if ((t1_rx_edc[0] != (UINT8)(crc >> 8)) ||
+            (t1_rx_edc[1] != (UINT8)(crc & 0xFF))) {
             return T1_RX_BADEDC;
         }
     } else {
-        if (!UART_Recv(&c, iso.cwt_slices)) {
+        if (UART_Recv_Burst(t1_rx_edc, 1, iso.cwt_slices, iso.cwt_slices) != 1) {
             return T1_RX_TIMEOUT;
         }
-        if (c != (UINT8)(t1_edc & 0xFF)) {
+        if (t1_rx_edc[0] != (UINT8)(t1_edc & 0xFF)) {
             return T1_RX_BADEDC;
         }
     }
@@ -332,7 +344,12 @@ void T1_Prepare(void) {
 
     /* If the ATR names T=0 first but also offers T=1, clause 9 says the card
      * will not listen to T=1 blocks until a PPS has switched it over. */
-    if ((iso.first_proto != 1) && (iso.protocols & ISO7816_PROTO_T1)) {
+    /* A host-issued CMD_PPS may already have selected T=1.  Do not send a
+     * second PPS here: PPS is only valid immediately after ATR and cards are
+     * not required to accept another one once T=1 traffic has begun. */
+    if ((iso.first_proto != 1) &&
+        (iso.active_proto != 1) &&
+        (iso.protocols & ISO7816_PROTO_T1)) {
         ISO7816_PPS(1, iso.ta1, 0);
     }
 
@@ -340,9 +357,9 @@ void T1_Prepare(void) {
      * the PPS above was refused - some cards accept T=1 regardless. */
     iso.active_proto = 1;
 
-    if (T1_IFSD_WANTED > 32) {
-        T1_Negotiate_IFSD(T1_IFSD_WANTED);
-    }
+#if T1_IFSD_WANTED > 32
+    T1_Negotiate_IFSD(T1_IFSD_WANTED);
+#endif
 }
 
 /* ------------------------------------------------------------------------ */

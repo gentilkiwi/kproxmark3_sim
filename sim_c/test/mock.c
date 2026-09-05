@@ -5,14 +5,24 @@
 #include "timer.h"
 #include "iso7816.h"
 
-bit uart_parity_err;
+volatile bit uart_parity_err;
 
 static unsigned char tocard[4096]; static int tocard_n;
 static unsigned char toterm[8192]; static int toterm_rd, toterm_wr;
 
 void card_step(void);
 
-void UART_Send(UINT8 c) { tocard[tocard_n++] = c; card_step(); }
+int mock_early_parity;
+int mock_retransmits;
+void UART_Send(UINT8 c) {
+    int before = toterm_wr;
+    tocard[tocard_n++] = c;
+    card_step();
+    if (mock_early_parity && toterm_wr != before) {
+        uart_parity_err = 1;
+        mock_early_parity = 0;
+    }
+}
 int mock_rx_timeouts;           /* how many reads came back empty */
 
 UINT8 UART_Recv(UINT8 *p, UINT16 slices) {
@@ -39,17 +49,20 @@ void UART_Drain(UINT16 s){ (void)s; toterm_rd = toterm_wr; uart_parity_err = 0; 
 void UART_Set_Reload(UINT16 r){ (void)r; }
 void UART_Set_TH1(UINT8 t){ (void)t; }
 void UART_Set_FiDi(UINT8 t){ (void)t; }
-UINT16 UART_Get_Reload(void){ return 23; }
-UINT16 UART_Ticks_Per_Etu(void){ return 30; }
-UINT16 UART_Etu_To_Slices(UINT32 e){ UINT32 s=(e*30UL)/16667UL+1; if(s>600)s=600; return (UINT16)s; }
+UINT32 UART_Get_Reload(void){ return 23; }
+UINT32 UART_Ticks_Per_Etu(void){ return 30; }
+UINT16 UART_Etu_To_Slices(UINT32 e){ UINT32 s=(e*124UL)/T0_SLICE_TICKS+1; if(s>T0_MAX_SLICES)s=T0_MAX_SLICES; return (UINT16)s; }
 void UART_Set_Guardtime(UINT8 n){ (void)n; }
 void UART_Rx_Reset(void){}
 void UART_Init(void){}
+void UART_Clock_Init(void){}
+UINT8 UART_Set_Clock(UINT8 d){ (void)d; return 1; }
+UINT8 UART_FiDi_Supported(UINT8 t){ (void)t; return 1; }
 void Timer0_Init(void){}
 void Timer0_Start_Slice(void){}
 void Timer0_Stop(void){}
 void Timer0_Delay_Slices(UINT16 s){ (void)s; }
-void Timer0_Delay_Ticks(UINT16 t){ (void)t; }
+void Timer0_Delay_Ticks(UINT32 t){ (void)t; }
 
 /* ------------------------------------------------------------------ */
 int  cd_ifsc        = 32;   /* what the card can send in one block   */
@@ -83,6 +96,7 @@ static void emit(unsigned char pcb, const unsigned char *inf, int len) {
 
 static void resend_last(void) {
     unsigned char b[300]; memcpy(b, cd_last, cd_last_n);
+    mock_retransmits++;
     if (cd_drop_n > 0)    { cd_drop_n--; return; }
     if (cd_corrupt_n > 0) { cd_corrupt_n--; b[cd_last_n-1] ^= 0xFF; }
     raw(b, cd_last_n);
@@ -175,4 +189,6 @@ void card_reset(void) {
     cd_ifsc = 32; cd_wtx_once = 0; cd_corrupt_n = 0;
     cd_ifs_req = 0; cd_drop_n = 0; cd_resp_len = 4;
     mock_rx_timeouts = 0;
+    mock_early_parity = 0;
+    mock_retransmits = 0;
 }

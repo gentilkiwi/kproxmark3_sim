@@ -14,7 +14,7 @@ B       = build
 SRC     = ..
 CFLAGS  = -std=gnu89 -Wall -Wextra -Wno-unused-parameter -Wno-main -include pre.h -I$(B) -I.
 
-TESTS = $(B)/t1test $(B)/t0test $(B)/e2etest $(B)/atrtest $(B)/i2ctest
+TESTS = $(B)/t1test $(B)/t0test $(B)/e2etest $(B)/atrtest $(B)/i2ctest $(B)/uarttest $(B)/clocktest
 
 # staging has to finish before make can match the object pattern rules, so the
 # build runs as a second pass
@@ -30,9 +30,10 @@ STAMP = $(B)/.staged
 
 $(STAMP): $(SRC)/N76E003.h $(SRC)/Common.h $(SRC)/Function_Define.h $(SRC)/SIM.C \
           $(SRC)/t1.c $(SRC)/iso7816.c $(SRC)/uart.c $(SRC)/timer.c \
-          mock.c mock_t0.c pre.h $(wildcard test_*.c)
+          mock.c mock_t0.c pre.h Makefile $(wildcard $(SRC)/*.h) $(wildcard test_*.c)
 	@mkdir -p $(B)
 	@cp $(SRC)/*.c $(SRC)/*.h $(B)/
+	@sed -e 's/interrupt 4 using 1//' -e 's/while (LOAD);/LOAD = 0;/' $(SRC)/uart.c > $(B)/uart.c
 	@cp $(SRC)/Function_Define.h $(B)/Function_define.h
 	@echo '/* stub */' > $(B)/intrins.h
 	@sed -e 's/^typedef bit  *BIT;/typedef unsigned char BIT;/' \
@@ -64,6 +65,10 @@ $(B)/e2etest: $(B)/sim_main.o $(B)/t1.o $(B)/iso7816.o $(B)/mock.o $(B)/sfrdefs.
 $(B)/atrtest: $(B)/iso7816.o $(B)/uart.o $(B)/sfrdefs.o $(B)/test_atr.o
 	$(CC) -o $@ $^
 $(B)/i2ctest: $(B)/sim_main.o $(B)/t1.o $(B)/iso7816.o $(B)/mock.o $(B)/sfrdefs.o $(B)/test_i2c.o
+	$(CC) -o $@ $^
+$(B)/uarttest: $(B)/uart.o $(B)/sfrdefs.o $(B)/test_uart.o
+	$(CC) -o $@ $^
+$(B)/clocktest: $(B)/uart.o $(B)/timer.o $(B)/iso7816.o $(B)/sfrdefs.o $(B)/test_clock.o
 	$(CC) -o $@ $^
 
 clean:

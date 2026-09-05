@@ -6,6 +6,8 @@
 
 extern void card_reset(void);
 extern int mock_rx_timeouts;
+extern int mock_early_parity;
+extern int mock_retransmits;
 extern int cd_ifsc, cd_wtx_once, cd_corrupt_n, cd_ifs_req, cd_ifs_req_val;
 extern int cd_drop_n, cd_resp_len, cd_cmd_n, cd_blocks_sent;
 extern unsigned char cd_cmd[];
@@ -34,6 +36,12 @@ static void t_simple(void) {
     CHECK(r == 4);
     CHECK(cd_cmd_n == 5 && memcmp(cd_cmd, tx, 5) == 0);
     CHECK(rx[2] == 0x90 && rx[3] == 0x00);
+
+    printf("early queued parity error requests a retransmission\n");
+    setup(); fill(5); cd_resp_len = 4; mock_early_parity = 1;
+    r = T1_Transceive(tx, 5, rx, sizeof(rx));
+    CHECK(r == 4);
+    CHECK(mock_retransmits == 1);
 }
 
 static void t_two_in_a_row(void) {

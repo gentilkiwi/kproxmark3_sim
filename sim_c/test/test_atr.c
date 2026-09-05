@@ -9,7 +9,7 @@ void Timer0_Init(void){}
 void Timer0_Start_Slice(void){}
 void Timer0_Stop(void){}
 void Timer0_Delay_Slices(UINT16 s){ (void)s; }
-void Timer0_Delay_Ticks(UINT16 t){ (void)t; }
+void Timer0_Delay_Ticks(UINT32 t){ (void)t; }
 bit BIT_TMP;
 
 static int fails;
@@ -17,9 +17,9 @@ static int fails;
 
 /* does a slice count cover `etu` and no more than one slice beyond it? */
 static int slice_covers(UINT16 slices, UINT32 etu) {
-    UINT32 want_us = etu * (UINT32)(UART_RELOAD_DEFAULT * 4u);   /* 1 etu = R*4 us */
-    UINT32 got_us  = (UINT32)slices * 50000UL;
-    return (got_us >= want_us) && (got_us < want_us + 50000UL);
+    UINT32 want_us = etu * 93UL;   /* 1 ETU = 372 / 4 MHz */
+    UINT32 got_us  = ((UINT32)slices * T0_SLICE_TICKS * 3UL) / 4UL;
+    return (got_us >= want_us) && (got_us < want_us + 25001UL);
 }
 
 static UINT8 buf[64];
@@ -37,18 +37,18 @@ int main(void) {
     /* rounded up - a truncated etu makes every derived timeout come out short */
     CHECK(UART_Ticks_Per_Etu() == ((4u * UART_RELOAD_DEFAULT) + 2u) / 3u);
     CHECK(UART_Ticks_Per_Etu() * 3u >= 4u * UART_RELOAD_DEFAULT);
-    UART_Set_FiDi(0x95); CHECK(UART_Get_Reload() == 2);   /* F=512 D=16 -> 125000 baud exactly */
-    UART_Set_FiDi(0x11); CHECK(UART_Get_Reload() == 23);
-    UART_Set_FiDi(0x18); CHECK(UART_Get_Reload() == 2);   /* F=372 D=12 -> 1.94 -> 2 */
-    UART_Set_FiDi(0x77); CHECK(UART_Get_Reload() == 2);   /* both RFU, left as it was */
-    UART_Set_TH1(0xE8);  CHECK(UART_Get_Reload() == 24);  /* legacy value round trips */
+    UART_Set_FiDi(0x95); CHECK(UART_Get_Reload() == 8);   /* F=512 D=16 -> 125000 baud exactly */
+    UART_Set_FiDi(0x11); CHECK(UART_Get_Reload() == 93);
+    UART_Set_FiDi(0x18); CHECK(UART_Get_Reload() == 8);   /* F=372 D=12, card divider 4 -> 7.75 -> 8 */
+    UART_Set_FiDi(0x77); CHECK(UART_Get_Reload() == 8);   /* both RFU, left as it was */
+    UART_Set_TH1(0xE8);  CHECK(UART_Get_Reload() == 96);  /* legacy 24 maps to 96 */
     UART_Set_Reload(23);
 
     printf("waiting times at the default etu\n");
     ISO7816_Reset_Params();
     /* Check the derived timeouts against the ISO figures worked out from first
      * principles, rather than against whatever the code happens to produce.
-     * One etu is R * 16 / Fsys = R * 4 us at Fsys = 4 MHz, and a slice is 50 ms,
+     * One ETU is R * 16 / Fsys = 93 us at Fsys = 16 MHz; slices are 25 ms,
      * so a timeout must land in [wanted, wanted + one slice). */
     CHECK(slice_covers(iso.wwt_slices, 960UL * 10UL + 480UL));   /* WWT, WI = 10 */
     CHECK(slice_covers(iso.bwt_slices, 16UL * 960UL + 11UL));    /* BWT, BWI = 4 */
@@ -107,8 +107,8 @@ int main(void) {
     CHECK(iso.bwi == 4 && iso.cwi == 13);
     /* and the rate that TA1 would ask for if a PPS ever negotiated it */
     UART_Set_FiDi(0x96);
-    CHECK(UART_Get_Reload() == 1);              /* 512 / (16 * 32) */
-    UART_Set_Reload(UART_RELOAD_DEFAULT);
+    CHECK(UART_Get_Reload() == 4);              /* 512 * 4 / (16 * 32) */
+    UART_Set_FiDi(0x11);
 
     printf("truncated ATR must not walk off the end\n");
     parse("3B FF");
@@ -126,7 +126,7 @@ int main(void) {
     {
         UINT32 etu = (960UL * 10UL) + 480UL;      /* WWT at WI = 10 */
 
-        UART_Set_Reload(UART_RELOAD_DEFAULT);
+        UART_Set_FiDi(0x11);
         UINT16 at_default = UART_Etu_To_Slices(etu);
 
         UART_Set_Reload(8);                        /* TA1 0x93, Fi=512 Di=4 */
@@ -142,7 +142,7 @@ int main(void) {
         UART_Set_Reload(64);
         CHECK(UART_Etu_To_Slices(etu) >= at_default);
 
-        UART_Set_Reload(UART_RELOAD_DEFAULT);
+        UART_Set_FiDi(0x11);
     }
 
     printf(fails ? "\n%d FAILURES\n" : "\nall ATR / baud checks passed\n", fails);

@@ -4,7 +4,7 @@
 #include "timer.h"
 #include "iso7816.h"
 
-bit uart_parity_err;
+volatile bit uart_parity_err;
 bit BIT_TMP;
 
 static unsigned char toterm[2048]; static int rd, wr;
@@ -18,6 +18,7 @@ int t0_sw1, t0_sw2;
 unsigned char t0_in[300]; int t0_in_n;
 int t0_single_left;
 int t0_recv_calls;      /* UART_Recv calls: a drain shows up as an extra one */
+int t0_bad_byte;        /* one-based receive index with bad parity */
 
 static void push(unsigned char c){ toterm[wr++] = c; }
 static void push_sw(void){ push((unsigned char)t0_sw1); push((unsigned char)t0_sw2); }
@@ -53,6 +54,7 @@ void UART_Send(UINT8 c) {
 UINT8 UART_Recv(UINT8 *p, UINT16 s) {
     (void)s;
     t0_recv_calls++;
+    if (t0_recv_calls == t0_bad_byte) uart_parity_err = 1;
     if (rd < wr) { *p = toterm[rd++]; return 1; }
     *p = 0; return 0;
 }
@@ -75,23 +77,27 @@ void UART_Drain(UINT16 s){ (void)s; rd = wr; }
 void UART_Set_Reload(UINT16 r){ (void)r; }
 void UART_Set_TH1(UINT8 t){ (void)t; }
 void UART_Set_FiDi(UINT8 t){ (void)t; }
-UINT16 UART_Get_Reload(void){ return 23; }
-UINT16 UART_Ticks_Per_Etu(void){ return 30; }
-UINT16 UART_Etu_To_Slices(UINT32 e){ UINT32 x=(e*30UL)/16667UL+1; if(x>600)x=600; return (UINT16)x; }
+UINT32 UART_Get_Reload(void){ return 23; }
+UINT32 UART_Ticks_Per_Etu(void){ return 30; }
+UINT16 UART_Etu_To_Slices(UINT32 e){ UINT32 x=(e*124UL)/T0_SLICE_TICKS+1; if(x>T0_MAX_SLICES)x=T0_MAX_SLICES; return (UINT16)x; }
 void UART_Set_Guardtime(UINT8 n){ (void)n; }
 void UART_Rx_Reset(void){}
 void UART_Init(void){}
+void UART_Clock_Init(void){}
+UINT8 UART_Set_Clock(UINT8 d){ (void)d; return 1; }
+UINT8 UART_FiDi_Supported(UINT8 t){ (void)t; return 1; }
 void Timer0_Init(void){}
 void Timer0_Start_Slice(void){}
 void Timer0_Stop(void){}
 void Timer0_Delay_Slices(UINT16 s){ (void)s; }
-void Timer0_Delay_Ticks(UINT16 t){ (void)t; }
+void Timer0_Delay_Ticks(UINT32 t){ (void)t; }
 void I2C_Init(void){}
 
 void t0_reset(void) {
     rd = wr = 0; hdr_n = 0; t0_in_n = 0; t0_single_left = 0;
     t0_mode = 0; t0_nulls = 0; t0_outlen = 0; t0_expect_in = 0;
     t0_sw1 = 0x90; t0_sw2 = 0x00; t0_recv_calls = 0;
+    t0_bad_byte = 0;
 }
 const unsigned char *t0_header(void){ return hdr; }
 

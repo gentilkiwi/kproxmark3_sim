@@ -37,9 +37,14 @@
  *                hold the I2C bus for tens of seconds retrying a quiet card,
  *                far past the point the Proxmark3 gives up - which wedges the
  *                bus, since only this module can release SCL.
+ * v4.63        : do not repeat PPS in SEND_T1 when CMD_PPS already selected
+ *                T=1 after the ATR.
+ * v4.65        : T=1 receive path consumes normal blocks in bursts, leaving
+ *                enough CPU time at TA1=95 (Fi=512, Di=16).
+ * v4.66        : interrupt-fed receive queue for TA1=96 in T=0 and T=1.
  */
 #define SIM_MODULE_VERS_HI  4
-#define SIM_MODULE_VERS_LO  62
+#define SIM_MODULE_VERS_LO  66
 
 /* Every reply to the PM3 is prefixed with a big endian 16 bit length. */
 #define PM3_CMD_HEADER_LEN  2

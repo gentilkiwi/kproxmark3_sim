@@ -12,6 +12,7 @@ extern volatile UINT16 to_pm3_len;
 extern void t0_reset(void);
 extern int t0_mode, t0_nulls, t0_outlen, t0_expect_in, t0_sw1, t0_sw2, t0_in_n;
 extern int t0_recv_calls;
+extern int t0_bad_byte;
 extern unsigned char t0_in[];
 extern const unsigned char *t0_header(void);
 extern void t0_push_raw(const unsigned char *b, int n);
@@ -167,6 +168,22 @@ int main(void) {
     {
         unsigned char leftover;
         CHECK(UART_Recv(&leftover, 1) == 0);
+    }
+
+    printf("bad parity in procedure, data or status rejects the answer\n");
+    {
+        int bad;
+        for (bad = 1; bad <= 7; bad++) {
+            setup();
+            to_sim[0]=0x00; to_sim[1]=0xB0; to_sim[4]=0x04;
+            curr_sim_len = 5; t0_outlen = 4; t0_bad_byte = bad;
+            SEND_T0();
+            CHECK(rlen() == 0);
+        }
+        setup();
+        curr_sim_len = 5; t0_mode = 2; t0_bad_byte = 2;
+        SEND_T0();
+        CHECK(rlen() == 0);
     }
 
     printf(fails ? "\n%d FAILURES\n" : "\nall T=0 checks passed\n", fails);
